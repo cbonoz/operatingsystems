@@ -1,0 +1,17 @@
+# robots.txt for lasr.cs.ucla.edu
+# questions? root@lasr.cs.ucla.edu
+
+User-Agent: *
+
+# traffic traces
+Disallow: /ddos/traces/public
+Disallow: /geoff/seer_traces
+Disallow: /ficus-members/songuku/lever/exampletraces/clean_traces
+Disallow: /lasr-members/songuku/lever/exampletraces/clean_traces
+Disallow: /fmg-members/songuku/lever/exampletraces/clean_traces
+Disallow: /dward/traces/public
+Disallow: /~turker/projects.html
+Disallow: /~turker/cv.html
+Disallow: /~turker/pdfs/
+Disallow: /~turker/images/
+
