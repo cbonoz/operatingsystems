@@ -21,7 +21,7 @@ make_command_stream parses the enter filestream and returns
 */
 
 struct command_stream {
-  command_t *current;
+  command_t current;
   command_stream *next;
 };
 
@@ -32,9 +32,9 @@ struct command_stream {
 
   return the command struct
 */
-
 command_t parseCmd(char *cmdtext) {
   command_t t;
+  printf("%s",cmdtext);
   return t;
 }
 
@@ -51,6 +51,11 @@ bool checkChar(char c) {
 }
 
 bool cmdEnd(char c) {
+  if (!checkChar(cur))
+    error(1,0,"Syntax error (Illegal character found)");
+
+  if (cur=='\n' || cur==';')
+    return true;
   return false;
 }
 
@@ -58,48 +63,38 @@ command_stream_t
 make_command_stream(int (*get_next_byte) (void *),
 		     void *get_next_byte_argument)
 {
-    char cur;
-    char prev;
-    
-    command_stream_t stream = (command_stream_t) checked_malloc(sizeof(command_stream));
-   
-   char *cur_cmd=(char *) checked_malloc(sizeof(char));
-   /*
-   while (cur=get_next_byte(get_next_byte_argument)) {
+  char cur;
+  
+  command_stream_t head = (command_stream_t) checked_malloc(sizeof(command_stream));
+  command_stream_t tail=head;
+ 
+  //cmd string currently building
+  char *cur_cmd=(char *) checked_malloc(sizeof(char));
 
-      if (!checkChar(cur))
-        error(1,0,"Syntax error (Illegal character found)");
+  cur=get_next_byte(get_next_byte_argument);
+  //I don't know what the end of a command is - is it '
+  while(feof(get_next_byte_argument)) {
 
-      if (cmdEnd(cur))
-        command_t p = (command_t) checked_malloc(sizeof(command_t))
-        p=parseCmd(cur_cmd);
+    while (!cmdEnd(cur)) {
+      int end=strlen(cur_cmd);
+      cur_cmd=(char *) checked_realloc(end+1);
+      cur_cmd[end]=cur;
+      cur=get_next_byte(get_next_byte_argument);
+    }
 
-        if (p) {
-          stream->next=malloc()
-        }
+    if (true/*something*/) {
+      tail->current=(command_t) checked_malloc(sizeof(command));
+      tail->current=parseCmd(cur_cmd);
 
-      while (!checkCmdEnd(cur)) {
+      tail->next=(command_stream_t) checked_malloc(sizeof(command_stream));
+      tail=tail->next;
 
-      }
-      //string s += cur;
-      //parseCmd()
-   }
-  */
+    }
+  }
 
-   //return stream;
-
-  /*
-    make_command_stream parses the file stream 
-
-
-
-  */
-  /* FIXME: Replace this with your implementation.  You may need to
-     add auxiliary functions and otherwise modify the source code.
-     You can also use external functions defined in the GNU C Library.  */
-  error (1, 0, "command reading not yet implemented");
-  return 0;
-}
+  //error (1, 0, "command reading not yet implemented");
+  return head;
+  }
 
 command_t
 read_command_stream (command_stream_t s)
