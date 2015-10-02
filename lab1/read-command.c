@@ -9,6 +9,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <regex.h>
 
 #define N 10000
 
@@ -18,14 +19,10 @@
 /* FIXME: Define the type 'struct command_stream' here.  This should
    complete the incomplete type declaration in command.h.  */
 
-/*
-
-
-*/
 typedef enum command_type cmd_type;
 
 struct command_stream {
-  char a[N];
+  char stream[N];
   int index;
 };
 
@@ -51,35 +48,94 @@ stripChar(char *str, char strip)
     *q = '\0';
 }
 
+void freeCmd(command_t t) {
+  if (t) {
+    free(t->input);
+    free(t->output);
+    free(t->command)
+    free(t->word);
+    free(t->subshell_command);
+    free(t);
+  }
+
+
+}
+
+
+
 command_t 
 parseCmd(char *str) {
   int l=strlen(str)
 
   command_t t = (command_t) checked_malloc(sizeof(struct command));
-
-  if (str[0]=='(' and str[l-1]==')') { //subshell
-    str=substr(str,1,l-1);
+  char *op=strpbrk(str,"$*;|()");
+  if (str[0]=='(' and str[l-1]==')') { 
+    //subshell
+    char *sub=(char *) checked_malloc(l-1);
+    memcpy(str+1,sub,l-2);
+    free(str);
+    sub[l-1]="\0";
     t->type=SUBSHELL_COMMAND;
-    t->subshell=parseCmd(str);
- } else if (/*no operator and no bracket in string*/) { //use strpbrk
-      t->type=SIMPLE_COMMAND
+    t->subshell_command=parseCmd(sub);
+
+    
+ } else if (!op) { 
+      /*no operator and no bracket in string*/
+      t->type=SIMPLE_COMMAND;
       t->word=(char **) checked_malloc(sizeof(char *));
-      //now read and parse the simple command string
+      //parse the simple command and check for input and output redirections
+      bool inmode,outmode;
+      inmode=false;
+      outmode=false;
+      char c;
+      int ct=0;
+      for (int i=0;i<l;i++) {
+        c=str[i];
+        if (c==" ") {
+          if (ct!=0) {
+            int start=i-ct;
+            if (inmode) {
+              t->input=(char *) checked_malloc(ct+1);
+              memcpy(str+start,t->input,ct);
+              inmode=false;
+            } else if (outmode) {
+              t->output=(char *) checked_malloc(ct+1);
+              memcpy(str+start,t->output,ct);
+              outmode=false;
+            } else {
+              if (t->word) {
 
-     
+              }
+            }
+          }
+          ct=0;
+          continue;
+        }
+        else if (c==">")
+          outmode=true
+        else if (c=="<")
+          inmode=true
+        else {
+          ct++;
 
+        }
 
+      }
 
-  } else (/*find the greatest precedence operator not in bracket*/) {
+      
+
+  } else  {
+  /*find the greatest precedence operator not in bracket*/) {
       //this is a complex command -> now need to determine type
-      switch(op) {
+
+      switch(*op) {
         case ";":
           t->type=SEQUENCE_COMMAND;
           break;
-        case "||":
+        case "$":
           t->type=OR_COMMAND;
           break;
-        case "&&":
+        case "*":
           t->type=AND_COMMAND;
           break;
         case "|":
@@ -94,12 +150,7 @@ parseCmd(char *str) {
       t->command=(command_t) checked_malloc(sizeof(struct command)*2);
       t->command[0]=parseCmd(leftstr);
       t->command[1]=parseCmd(rightstr);
-
     }
-
-
-
-
 
   return t;
 }
@@ -107,8 +158,6 @@ parseCmd(char *str) {
 helper function for verifying chars in the input file stream are valid
 bool checkChar(char c) {
   switch(c) {
-
-
     default:
       return true;
       break;
@@ -119,8 +168,8 @@ bool checkChar(char c) {
 
 bool isOperator(char *c) {
   switch(*c) {
-    case "||":
-    case "&&":
+    case "$"://||
+    case "*"://&&
     case ";":
     case "|":
       return true;
@@ -133,6 +182,8 @@ bool isOperator(char *c) {
         break;
   }
 }
+
+
 
 
 command_stream_t
@@ -160,6 +211,5 @@ of the file stream and return a single command_t tree structure
 command_t
 read_command_stream (command_stream_t s)
 {
-
-
+  return parseCmd(s->stream);
 }
