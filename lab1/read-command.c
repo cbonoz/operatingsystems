@@ -10,6 +10,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#define N 10000
+
 /* FIXME: You may need to add #include directives, macro definitions,
    static function definitions, etc.  */
 
@@ -17,14 +19,14 @@
    complete the incomplete type declaration in command.h.  */
 
 /*
-#define N 10000
+
 
 */
 typedef enum command_type cmd_type;
 
 struct command_stream {
-  command_t current;
-  command_stream *next;
+  char a[N];
+  int index;
 };
 
 /*
@@ -51,28 +53,58 @@ stripChar(char *str, char strip)
 
 command_t 
 parseCmd(char *str) {
-  command_t t;
+  int l=strlen(str)
 
-  const char str2[] = "() <>|";
-  char *ret;
+  command_t t = (command_t) checked_malloc(sizeof(struct command));
 
-  ret = strpbrk(str1, str2);
-  while (ret) {
-    if(ret) 
-    {
-      printf("First matching character: %c\n", *ret);
+  if (str[0]=='(' and str[l-1]==')') { //subshell
+    str=substr(str,1,l-1);
+    t->type=SUBSHELL_COMMAND;
+    t->subshell=parseCmd(str);
+ } else if (/*no operator and no bracket in string*/) { //use strpbrk
+      t->type=SIMPLE_COMMAND
+      t->word=(char **) checked_malloc(sizeof(char *));
+      //now read and parse the simple command string
+
+     
+
+
+
+  } else (/*find the greatest precedence operator not in bracket*/) {
+      //this is a complex command -> now need to determine type
+      switch(op) {
+        case ";":
+          t->type=SEQUENCE_COMMAND;
+          break;
+        case "||":
+          t->type=OR_COMMAND;
+          break;
+        case "&&":
+          t->type=AND_COMMAND;
+          break;
+        case "|":
+          t->type=PIPE_COMMAND;
+          break;
+        default:
+          //should not get here
+          break;
+
+      }
+      //Now split the current command string on the operator
+      t->command=(command_t) checked_malloc(sizeof(struct command)*2);
+      t->command[0]=parseCmd(leftstr);
+      t->command[1]=parseCmd(rightstr);
+
     }
-    else 
-    {
-      printf("Character not found");
-    }
-  }
+
+
 
 
 
   return t;
 }
 
+helper function for verifying chars in the input file stream are valid
 bool checkChar(char c) {
   switch(c) {
 
@@ -85,64 +117,43 @@ bool checkChar(char c) {
   return true;
 }
 
-bool cmdEnd(char c) {
-  if (!checkChar(cur))
-    error(1,0,"Syntax error (Illegal character found)");
+bool isOperator(char *c) {
+  switch(*c) {
+    case "||":
+    case "&&":
+    case ";":
+    case "|":
+      return true;
+      break;
 
-  if (cur=='\n' || cur==';')
-    return true;
-  return false;
-}
 
-void freeCS(command_stream_t *t) {
-  command_stream_t prev, cur;
-  cur=t;
-  while (cur) {
-    prev=cur;
-    free(cur->current)
-    cur=cur->next;
-    free(prev);
+
+    default:
+        return false;
+        break;
   }
 }
+
 
 command_stream_t
 make_command_stream(int (*get_next_byte) (void *),
 		     void *get_next_byte_argument)
 {
-  char cur;
-  
-  command_stream_t head = (command_stream_t) checked_malloc(sizeof(command_stream));
-  command_stream_t tail=head;
+  //read and validate the input file stream
+   b=get_next_byte(get_next_byte_argument);
+  //b is the character before a new line character, 
+   //needs to be treated specially
  
-  //cmd string currently building
-  char *cur_cmd=(char *) checked_malloc(sizeof(char));
 
-  cur=get_next_byte(get_next_byte_argument);
-  //I don't know what the end of a command is - is it '
-  while(feof(get_next_byte_argument)) {
+  //psuedocode for replacing newline in the input stream 
+   //to be parsed by parse command
+   if (isOperator(b)): newline=space
+      else if (b=="("): newline=space
+      else if (b==")"): newline=";"
+      if (b==word): newline==";"
 
-    while (!cmdEnd(cur)) {
-      int end=strlen(cur_cmd);
-      cur_cmd=(char *) checked_realloc(end+1);
-      cur_cmd[end]=cur;
-      cur=get_next_byte(get_next_byte_argument);
-    }
 
-    if (true/*something*/) {
-      tail->current=(command_t) checked_malloc(sizeof(command));
-      tail->current=parseCmd(cur_cmd);
-
-      tail->next=(command_stream_t) checked_malloc(sizeof(command_stream));
-      tail=tail->next;
-
-    }
-  }
-
-  free(cur_cmd);
-
-  //error (1, 0, "command reading not yet implemented");
-  return head;
-  }
+}
 /*read command stream will take the cleaned up version
 of the file stream and return a single command_t tree structure
 */
