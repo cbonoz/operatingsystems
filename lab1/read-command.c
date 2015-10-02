@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 /* FIXME: You may need to add #include directives, macro definitions,
    static function definitions, etc.  */
@@ -16,9 +17,10 @@
    complete the incomplete type declaration in command.h.  */
 
 /*
-command_stream is linked list of commands coming through the filestream
-make_command_stream parses the enter filestream and returns 
+#define N 10000
+
 */
+typedef enum command_type cmd_type;
 
 struct command_stream {
   command_t current;
@@ -32,9 +34,42 @@ struct command_stream {
 
   return the command struct
 */
-command_t parseCmd(char *cmdtext) {
+command_t
+detectType(char *cmdtext) {
+  return NULL;
+}
+
+void
+stripChar(char *str, char strip)
+{
+    char *p, *q;
+    for (q = p = str; *p; p++)
+        if (*p != strip)
+            *q++ = *p;
+    *q = '\0';
+}
+
+command_t 
+parseCmd(char *str) {
   command_t t;
-  printf("%s",cmdtext);
+
+  const char str2[] = "() <>|";
+  char *ret;
+
+  ret = strpbrk(str1, str2);
+  while (ret) {
+    if(ret) 
+    {
+      printf("First matching character: %c\n", *ret);
+    }
+    else 
+    {
+      printf("Character not found");
+    }
+  }
+
+
+
   return t;
 }
 
@@ -57,6 +92,17 @@ bool cmdEnd(char c) {
   if (cur=='\n' || cur==';')
     return true;
   return false;
+}
+
+void freeCS(command_stream_t *t) {
+  command_stream_t prev, cur;
+  cur=t;
+  while (cur) {
+    prev=cur;
+    free(cur->current)
+    cur=cur->next;
+    free(prev);
+  }
 }
 
 command_stream_t
@@ -92,20 +138,17 @@ make_command_stream(int (*get_next_byte) (void *),
     }
   }
 
+  free(cur_cmd);
+
   //error (1, 0, "command reading not yet implemented");
   return head;
   }
-
+/*read command stream will take the cleaned up version
+of the file stream and return a single command_t tree structure
+*/
 command_t
 read_command_stream (command_stream_t s)
 {
-  /* FIXME: Replace this with your implementation too.  */
-  error (1, 0, "command reading not yet implemented");
-  /*
-  do {
-    print_command(s.current)
-  } while (s.next)
-  */
 
-  return 0;
+
 }
