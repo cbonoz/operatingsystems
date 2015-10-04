@@ -21,18 +21,20 @@
 
 typedef enum command_type cmd_type;
 
+/*
 struct command_stream {
   char stream[N];
   int index;
+  int linenumber;
+};
+*/
+
+struct command_stream {
+  command cmd;
+  command_stream_t next;
 };
 
-/*
-  first check that cmdtext is valid
 
-  if text is valid create command out of it
-
-  return the command struct
-*/
 
 bool 
 isSpecial(char c) {
@@ -105,29 +107,35 @@ freeCmd(command_t t) {
 
 /*
 parseCmd
-@param str - string containing command to be parsed
+@param start - pointer to command string start
+#@param end - pointer to command string end
 @return command_t - pointer to allocated memory with the defined/parsed command
 */
 command_t 
-parseCmd(char *str) {
-
-  //length of command string
-  int length=strlen(str);
+parseCmd(char *start, char *end) {
+  if (start==end) return NULL;
 
   command_t t = (command_t) checked_malloc(sizeof(struct command));
 
-  //find pointer to first operator in command (if it exists)
-  char *op=strpbrk(str,"$*;|");
+  char *ptr=start;
+  bool subshell=false;
 
-   if (str[0]=='(') { //opening of subshell
-    char *endsub=strpbrk(str,")");
-    int subl=endsub-str;
-    char *substr=(char *) checked_malloc(subl+1);
-    memcpy(substr,str+1,subl);
-    substr[subl-1]="\0";
-    t->type=SUBSHELL_COMMAND;
-    t->subshell_command=parseCmd(substr);
-  } else if (op) {
+  if (*ptr=='(') { //opening of subshell
+    subshell=true;
+    int openparen=1;
+
+    //find end of subshell
+    while (openparen>0) {
+      char c=*++ptr;
+      if (c == '(')
+        openparen++;
+      else if (c==')')
+        openparen--;
+    } 
+  }
+
+  char *op=strpbrk(ptr+1,"$*;|");
+  if (op) { // if operator in expression
       switch(*op) {
         case ";":
           t->type=SEQUENCE_COMMAND;
@@ -145,83 +153,91 @@ parseCmd(char *str) {
           error(1,0,"illegal operator detected");
           //should not get here
           break;
-
-      }
-      //Split the current complex command string on the operator
+        }
+    
       t->command=(command_t *) checked_malloc(sizeof(command_t)*2);
-
-      int leftlen=op-str;
-      int rightlen=length-leftlen-1;//-1 to exclude the operator from rightstr
-
-      char *leftstr=(char *)checked_malloc(leftlen+1);
-      char *rightstr=(char *)checked_malloc(rightlen+1);
-
-      memcpy(leftstr,str,leftlen);
-      memcpy(rightstr,op+1,rightlen);
-
-      t->command[0]=parseCmd(leftstr);
-      t->command[1]=parseCmd(rightstr);
-  }
- } else /*if (!op)*/ { 
-      /*no operator and no bracket in string*/
+      t->command[0]=parseCmd(start,op-1);
+      t->command[1]=parseCmd(op+1,end);
+      
+    
+  } else if (subshell) { //if subshell
+    t->type=SUBSHELL_COMMAND;
+    t->subshell_command=(command_t *) checked_malloc(sizeof(command_t));
+    t->subshell_command=parseCmd(start+1,ptr-1);
+  } else { //simple command with no op and no subshell
       t->type=SIMPLE_COMMAND;
       t->word=(char **) checked_malloc(sizeof(char *));
-      
       char c;
-      //parse the simple command and check for input and output redirections
+      
       bool inmode=false,
         outmode=false;
      
-      int ct=0;//counter for chars of word
-      int wdct=0;//counter for words
+      int ct=0;//character count tracker for word
+      int wdct=0;//word count tracker
 
-      //construct the simple command struct from str
-      for (int i=0;i<length;i++) {
-        c=str[i];
-        if (!isWordChar(c)||i==length-1) {
+      //construct the simple command struct from str - check for redirections
+      ptr=start;
+      while (ptr!=end+1) {
+        c=*ptr++;
+        if (!isWordChar(c)) { //if not wordchar 
 
           if (c==">")
             outmode=true;
           if (c=="<")
             inmode=true;
 
-          if (ct!=0) {
-            int start=i-ct;
+          if (ct>0) { //word ended - allocate it in command struct
+            char *wstart=ptr-ct;
             if (inmode) {
               t->input=(char *) checked_malloc(ct+1);
               *(t->input+ct)="\0";
-              memcpy(t->input,str+start,ct);
+              memcpy(t->input,wstart,ct);
               inmode=false;
             } else if (outmode) {
               t->output=(char *) checked_malloc(ct+1);
               *(t->input+ct)="\0";
-              memcpy(t->output,str+start,ct);
+              memcpy(t->output,wstart,ct);
               outmode=false;
             } else {
               if (wdct>0)
                 t->word(char **) checked_realloc(sizeof(char *)*(wdct+1);
 
               t->word[wdct]=(char *) checked_malloc(sizeof(ct+1));
-              memcpy(t->word[wdct],str+start,ct);
+              memcpy(t->word[wdct],wstart,ct);
               wdct++;
             }
           }
-          ct=0;
-          continue;
+          ct=0; 
+          
         }
         else //isWordChar is true - add to character count for current word
           ct++;
       }
-
-      
-
   }
-
-  free(str);
-
   return t;
 }
 
+command_stream_t
+commandToStream(command_t t, command_stream_t s) {
+  s=(command_stream_t) checked_malloc(sizeof command_stream);
+  s->cmd=*t;
+
+  switch(t->type) {
+    case: AND_COMMAND:         // A && B
+    case: SEQUENCE_COMMAND:    // A ; B
+    case: OR_COMMAND:          // A || B
+    case: PIPE_COMMAND:        // A | B
+      command_stream_t tmp=commandToStream(t->command[0],s->next);//need tmp in case command[0] is nested
+      commandToStream(t->command[1],tmp->next);
+      break;
+    case: SIMPLE_COMMAND:      // a simple command
+      s->next=NULL;
+      break;
+    case: SUBSHELL_COMMAND:    //( A )
+      commandToStream(t->subshell_command,s->next);
+      break;
+  }
+}
 
 
 
@@ -231,6 +247,8 @@ command_stream_t
 make_command_stream(int (*get_next_byte) (void *),
 		     void *get_next_byte_argument)
 {
+  char *validated_str;
+  validated_str=NULL;
   /*
   //read and validate the input file stream
    b=get_next_byte(get_next_byte_argument);
@@ -246,15 +264,29 @@ make_command_stream(int (*get_next_byte) (void *),
       if (b==word): newline==";"
 
   */
-      return NULL;
+      command_t t=parseCmd(validated_str,validated_str+strlen(validated_str));
+      command_stream_t head;
+      commandToStream(t,head);
+      return head;
 }
 
+
 /*read command stream will take the cleaned up version
-of the file stream and return a single command_t tree structure
+of the file stream and return a command_t tree. The tree will spit out the commands in order.
 */
+//build a stack of commands pop
+
+
 command_t
 read_command_stream (command_stream_t s)
 {
-  //return the parsed command_stream with a pointer to the head command struct
-  return parseCmd(s->stream);
+  if (!s) 
+    return NULL;
+
+  command_t c = &(s->cmd);
+  s=s->next;
+
+  return c;
+
+
 }
