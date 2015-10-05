@@ -105,7 +105,7 @@ freeCmd(command_t t) {
     free(t->input);
     free(t->output);
     int ct=0;
-    while(t->u.word[ct])
+    while(t->u.word[ct]!=NULL)
       free(t->u.word[ct++]);
     if(t->u.command) {
       freeCmd(t->u.command[0]);
@@ -169,6 +169,7 @@ parseCmd
 @return command_t - pointer to allocated memory with the defined/parsed command
 */
 
+
 command_t 
 parseCmd(char *start, char *end) {
   if (start>end || iters++>MAXITER) return NULL;
@@ -188,7 +189,7 @@ parseCmd(char *start, char *end) {
   if (*ptr=='(') { //opening of subshell
     subshell=true;
     int openparen=1;
-    //printf("subshell detected\n");
+    ////printf("subshell detected\n");
 
     //find end of subshell
     while (openparen>0) {
@@ -207,7 +208,7 @@ parseCmd(char *start, char *end) {
   char *op=strpbrk(ptr+1,"$*;|");
   
   if (op && op<end) { // if operator in expression
-      //printf("op: %c\n",*op);
+      ////printf("op: %c\n",*op);
       switch(*op) {
         case ';':
           t->type=SEQUENCE_COMMAND;
@@ -226,7 +227,7 @@ parseCmd(char *start, char *end) {
           //should not get here
           break;
         }
-      printf("complex command type%d: %.*s %.*s\n", t->type, op-start, start,end-op,op+1);
+      //printf("complex command type%d: %.*s %.*s\n", t->type, op-start, start,end-op,op+1);
       //t->u.command=(command_t *) checked_malloc(sizeof(command_t)*2);
       
       t->u.command[0]=parseCmd(start,op-1);
@@ -234,12 +235,12 @@ parseCmd(char *start, char *end) {
       
     
   } else if (subshell) { //if subshell
-      printf("subshell command\n");
+      //printf("subshell command\n");
     t->type=SUBSHELL_COMMAND;
     t->u.subshell_command=(command_t) checked_malloc(sizeof(command_t));
     t->u.subshell_command=parseCmd(start+1,ptr-1);
   } else { //simple command with no op and no subshell
-      printf("simple command\n");
+      //printf("simple command\n");
       t->type=SIMPLE_COMMAND;
       //t->u.word=(char **) checked_malloc(sizeof(char *));
       char c;
@@ -258,19 +259,19 @@ parseCmd(char *start, char *end) {
         c=*ptr;
 
         bool isEnd=ptr==end;
-        printf("sc iteration (char %c, in:%d, out: %d): %d\n",c,inmode,outmode,ct);
+        //printf("sc iteration (char %c, in:%d, out: %d): %d\n",c,inmode,outmode,ct);
 
-        if (isEnd) ct++;
+        
 
         if (isWordChar(c) && !isEnd)
           ct++;
         else { //word ended - allocate it in command struct
 
           if (ct>0 || isEnd) {
-            
+            if (isEnd) ct++;
             char *wstart = ptr-ct;
             if (isEnd)wstart++;
-            printf("allocating:%.*s\n", ct, wstart);
+            //printf("allocating:%.*s\n", ct, wstart);
             if (inmode) {
               t->input=(char *) checked_malloc(ct+1);
               t->input[ct]='\0';
@@ -282,16 +283,12 @@ parseCmd(char *start, char *end) {
               memcpy(t->output,wstart,ct);
               outmode=false;
             } else {
-              //if (wdct>0) {
+  
               t->u.word=(char **) checked_realloc(t->u.word,sizeof(char *) * (wdct+1));
-              //}
-              char *cw=t->u.word[wdct];
-              cw=(char *) checked_malloc(ct+2);
-              cw[ct]='\0';
-              cw[ct+1]='\0';
-
-              memcpy(cw,wstart,ct);
-              printf("%s after memcpy with wdct %d, ct %d\n",t->u.word[wdct],wdct,ct);
+              t->u.word[wdct]=(char *) checked_malloc(ct+1);
+              memcpy(t->u.word[wdct],wstart,ct);
+              t->u.word[wdct][ct]='\0';
+              printf("%s after memcpy with wdct %d, ct %d\n",*(t->u.word+wdct),wdct,ct);
               wdct++;
             }
           }
@@ -304,8 +301,10 @@ parseCmd(char *start, char *end) {
         ptr++;
       }    
     }
+  
   return t;
 }
+
 
 
 
@@ -405,21 +404,30 @@ make_command_stream(int (*get_next_byte) (void *),
         }
         break;
       case '\n':
-        if (buffer[next] == '\n')
-        {
-          buffer[curr] = '@';
-          buffer[next] = ' ';
-          lineNum++;
-          next = nextIndex(buffer, bufferSize, curr);
-        }
         if ((prev!=-1) && (buffer[prev] == '<' || buffer[prev] == '>'))
         {
           error(1,0,"%d: Syntax error (New line character can only follow tokens other than < >.)\n", lineNum);
         }
-        else if ((next!=bufferSize)
-          && (!(buffer[next] == '(' || buffer[next]==')' || isWordChar(buffer[next]))))
+        
+        if (buffer[next] == '\n')
         {
-          error(1,0,"%d, Syntax error (New line character can only be followed by (, ), or Words.)\n", lineNum);
+          if(buffer[prev] != '$' && buffer[prev] != '*' && buffer[prev] != '|')
+          {
+            buffer[curr] = '@';
+          }
+          else
+          {
+            buffer[curr] = ' ';
+          }
+          buffer[next] = ' ';
+          lineNum++;
+          next = nextIndex(buffer, bufferSize, next);
+          while (buffer[next] == '\n')
+          {
+            buffer[next] = ' ';
+            next = nextIndex(buffer, bufferSize, next);
+            lineNum++;
+          }
         }
         else if ((prev!=-1) && (next!=bufferSize) && ((isOperator(buffer[prev])) || (buffer[prev]=='(')))
         {
@@ -429,6 +437,13 @@ make_command_stream(int (*get_next_byte) (void *),
         {
           buffer[curr] = ';';
         }
+
+        if ((next!=bufferSize)
+          && (!(buffer[next] == '(' || buffer[next]==')' || isWordChar(buffer[next]))))
+        {
+          error(1,0,"%d, Syntax error (New line character can only be followed by (, ), or Words.)\n", lineNum);
+        }
+        
         lineNum++;
         break;
     }
@@ -469,10 +484,11 @@ make_command_stream(int (*get_next_byte) (void *),
   command_stream_t cstream = (command_stream_t) checked_malloc(sizeof(struct command_stream));
   cstream->stream = buffer;
   cstream->index = 0;
-  printf("Buffer: %s\n\n", buffer);
+  printf("Buffer: %s\n", buffer);
   
   return cstream;
 }
+
 
 
 command_t
@@ -492,10 +508,10 @@ read_command_stream (command_stream_t s)
     char c=*endptr;
     while (c != ENDCHAR && c!='\0')
         c=*++endptr;
-    //printf("%c",c);
+    ////printf("%c",c);
     s->index=endptr - s->stream;
-    //printf("index: %d,len: %d\n",s->index,l);
-    //printf("cmd::: %.*s\n", endptr-start,start);
+    ////printf("index: %d,len: %d\n",s->index,l);
+    ////printf("cmd::: %.*s\n", endptr-start,start);
     return parseCmd(start,endptr-1);
   }
   return NULL;

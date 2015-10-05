@@ -26,13 +26,15 @@ command_indented_print (int indent, command_t c)
       }
 
     case SIMPLE_COMMAND:
-      {
-	char **w = c->u.word;
-	printf ("%*s%s", indent, "", *w);
-	while (*++w)
-	  printf (" %s", *w);
-	break;
-      }
+    {
+
+      	char **w = c->u.word;
+      	printf ("%*s%s", indent, "", *w);
+      	while (*++w)
+      	  printf (" %s", *w);
+      	break;
+        
+    }
 
     case SUBSHELL_COMMAND:
       printf ("%*s(\n", indent, "");
@@ -43,11 +45,13 @@ command_indented_print (int indent, command_t c)
     default:
       abort ();
     }
-
+   
   if (c->input)
     printf ("<%s", c->input);
   if (c->output)
     printf (">%s", c->output);
+
+  
 }
 
 void

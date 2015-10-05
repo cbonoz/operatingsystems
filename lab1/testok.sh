@@ -1,4 +1,1 @@
-
-foo;
-g++ -c foooo sdaf asf;
-foo
+g++ -c foo.c a #currently segfault
