@@ -5,10 +5,15 @@
 #include <getopt.h>
 #include <stdio.h>
 
+#include <stdlib.h>
+#include <string.h>
+
 #include "command.h"
 
 static char const *program_name;
 static char const *script_name;
+
+#define SCRIPT "a&&b"
 
 static void
 usage (void)
@@ -29,12 +34,14 @@ main (int argc, char **argv)
   int command_number = 1;
   int print_tree = 0;
   int time_travel = 0;
+  int make=1;
   program_name = argv[0];
 
   for (;;)
     switch (getopt (argc, argv, "pt"))
       {
       case 'p': print_tree = 1; break;
+      case 'm': print_tree =1; make=0; break;
       case 't': time_travel = 1; break;
       default: usage (); break;
       case -1: goto options_exhausted;
@@ -49,24 +56,36 @@ main (int argc, char **argv)
   FILE *script_stream = fopen (script_name, "r");
   if (! script_stream)
     error (1, errno, "%s: cannot open", script_name);
-  command_stream_t command_stream =
-    make_command_stream (get_next_byte, script_stream);
+  command_stream_t command_stream=make_command_stream (get_next_byte, script_stream);
+  /*
+  if (make)
+    command_stream=make_command_stream (get_next_byte, script_stream);
+  else {
+    command_stream=(command_stream_t) malloc(sizeof command_stream);
+    char str[]=SCRIPT;
+    memcpy(command_stream->stream,str,strlen(str));
+    command_stream->index=0;
+  }
+  */
 
   command_t last_command = NULL;
   command_t command;
   while ((command = read_command_stream (command_stream)))
-    {
-      if (print_tree)
-	{
-	  printf ("# %d\n", command_number++);
-	  print_command (command);
-	}
-      else
-	{
-	  last_command = command;
-	  execute_command (command, time_travel);
-	}
-    }
+  {
+    if (print_tree)
+  	{
+  	  printf ("# %d\n", command_number++);
+  	  print_command (command);
+      //printf("\n%d\n",command_stream->index);
+  	}
+    else
+  	{
+  	  last_command = command;
+  	  execute_command (command, time_travel);
+  	}
+  }
+
+  free(command_stream);
 
   return print_tree || !last_command ? 0 : command_status (last_command);
 }
