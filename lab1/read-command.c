@@ -14,10 +14,9 @@
 
 //#define N 10000
 #define ENDCHAR '@'
-#define MAXITER 25
+#define MAXITER 1000
 
 static bool debug=0;
-
 static int iters=0;
 
 /* FIXME: You may need to add #include directives, macro definitions,
@@ -92,13 +91,22 @@ stripChar(char *str, char strip)
     *q = '\0';
 }
 
+ char *
+ skipWs(char *ptr) {
+  while (*ptr==' ')
+    ptr++;
+  return ptr;
+  //return ptr;
+}
 
 void
 freeCmd(command_t t) {
   if (t) {
     free(t->input);
     free(t->output);
-    free(t->u.word);
+    int ct=0;
+    while(t->u.word[ct])
+      free(t->u.word[ct++]);
     if(t->u.command) {
       freeCmd(t->u.command[0]);
       freeCmd(t->u.command[1]);
@@ -111,173 +119,6 @@ freeCmd(command_t t) {
 void freeStream(command_stream_t s) {
   free(s);
 }
-
-
-/*
-parseCmd
-@param start - pointer to command string start
-@param end - pointer to command string end
-@return command_t - pointer to allocated memory with the defined/parsed command
-*/
-command_t 
-parseCmd(char *start, char *end) {
-  if (start>end || iters++>MAXITER) return NULL;
-
-  //printf("parsing: %.*s \n", end-start+1, start);
-
-  command_t t = (command_t) checked_malloc(sizeof(struct command));
-
-  char *ptr=start;
-  
-  bool subshell=false;
-
-  if (*ptr=='(') { //opening of subshell
-    subshell=true;
-    int openparen=1;
-    //printf("subshell detected\n");
-
-    //find end of subshell
-    while (openparen>0) {
-      ptr++;
-      char c=*ptr;
-      if (c == '(') {
-        openparen++;
-      } else if (c==')') {
-        openparen--;
-      }
-    } 
-  }
-
-
-  
-  char *op=strpbrk(ptr+1,"$*;|");
-  
-  if (op && op<end) { // if operator in expression
-      //printf("op: %c\n",*op);
-      switch(*op) {
-        case ';':
-          t->type=SEQUENCE_COMMAND;
-          break;
-        case '$':
-          t->type=OR_COMMAND;
-          break;
-        case '*':
-          t->type=AND_COMMAND;
-          break;
-        case '|':
-          t->type=PIPE_COMMAND;
-          break;
-        default:
-          error(1,0,"illegal operator detected");
-          //should not get here
-          break;
-        }
-      //printf("complex command type%d: %.*s %.*s\n", t->type, op-start, start,end-op,op+1);
-      //t->u.command=(command_t *) checked_malloc(sizeof(command_t)*2);
-      
-      t->u.command[0]=parseCmd(start,op-1);
-      t->u.command[1]=parseCmd(op+1,end);
-      
-    
-  } else if (subshell) { //if subshell
-      //printf("subshell command\n");
-    t->type=SUBSHELL_COMMAND;
-    t->u.subshell_command=(command_t) checked_malloc(sizeof(command_t));
-    t->u.subshell_command=parseCmd(start+1,ptr-1);
-  } else { //simple command with no op and no subshell
-      //printf("simple command\n");
-      t->type=SIMPLE_COMMAND;
-      t->u.word=(char **) checked_malloc(sizeof(char *));
-      char c;
-      
-      bool inmode=false,
-        outmode=false;
-     
-      int ct=0;//character count tracker for word
-      int wdct=0;//word count tracker
-
-      //construct the simple command struct from str - check for redirections
-      ptr=start;
-      
-      while (ptr<=end) {
-        c=*ptr;
-        bool isEnd=ptr==end;
-        //printf("sc iteration (char %c, in:%d, out: %d): %d\n",c,inmode,outmode,ct);
-        if (isEnd) ct++;
-
-        if (isWordChar(c) && !isEnd)
-          ct++;
-        else { //word ended - allocate it in command struct
-          if (ct>0 || isEnd) {
-            
-            char *wstart = ptr-ct;
-            if (isEnd)wstart++;
-            //printf("allocating:%.*s\n", ct, wstart);
-            if (inmode) {
-              t->input=(char *) checked_malloc(ct+1);
-              t->input[ct]='\0';
-              memcpy(t->input,wstart,ct);
-              inmode=false;
-            } else if (outmode) {
-              t->output=(char *) checked_malloc(ct+1);
-              t->output[ct]='\0';
-              memcpy(t->output,wstart,ct);
-              outmode=false;
-            } else {
-              if (wdct>0) {
-                t->u.word=(char **) checked_realloc(t->u.word,sizeof(char *) * (wdct+1));
-              }
-              t->u.word[wdct]=(char *) checked_malloc(sizeof(ct+1));
-              t->u.word[wdct][ct]='\0';
-              memcpy(t->u.word[wdct++],wstart,ct);
-            }
-          }
-          ct=0;
-          if (c=='>')
-            outmode=true;
-          if (c=='<')
-            inmode=true;   
-        }
-
-        c=*++ptr;
-      }    
-    }
-  return t;
-}
-/*
-command_stream_t
-commandToStream(command_t t, command_stream_t s) {
-  s=(command_stream_t) checked_malloc(sizeof command_stream);
-  s->cmd=*t;
-
-  switch(t->type) {
-    case AND_COMMAND:         // A && B
-    case SEQUENCE_COMMAND:    // A ; B
-    case OR_COMMAND:          // A || B
-    case PIPE_COMMAND:        // A | B
-      command_stream_t tmp=commandToStream(t->u.command[0],s->next);//need tmp in case command[0] is nested
-      commandToStream(t->u.command[1],tmp->next);
-      break;
-    case SIMPLE_COMMAND:      // a simple command
-      s->next=NULL;
-      return s;
-      break;
-    case SUBSHELL_COMMAND:    //( A )
-      commandToStream(t->u.subshell_command,s->next);
-      return s;
-      break;
-  }
-
-}
-*/
-/*
-b is character before the newline
-if (isOperator(b)): newline=space
-      else if (b=="("): newline=space
-      else if (b==")"): newline=";"
-      if (b==word): newline==";"
-*/
-
 
 bool isCharValid(char currChar)
 {
@@ -321,6 +162,153 @@ int nextNonwhitespace(char* buffer, int bufferSize, int i)
 }
 
 
+/*
+parseCmd
+@param start - pointer to command string start
+@param end - pointer to command string end
+@return command_t - pointer to allocated memory with the defined/parsed command
+*/
+
+command_t 
+parseCmd(char *start, char *end) {
+  if (start>end || iters++>MAXITER) return NULL;
+  start=skipWs(start);
+
+  printf("parsing: %.*s \n", end-start+1, start);
+
+  command_t t = (command_t) checked_malloc(sizeof(struct command));
+
+  char *ptr=start;
+  
+  
+  bool subshell=false;
+
+  
+
+  if (*ptr=='(') { //opening of subshell
+    subshell=true;
+    int openparen=1;
+    //printf("subshell detected\n");
+
+    //find end of subshell
+    while (openparen>0) {
+      ptr++;
+      char c=*ptr;
+      if (c == '(') {
+        openparen++;
+      } else if (c==')') {
+        openparen--;
+      }
+    } 
+  }
+
+
+  
+  char *op=strpbrk(ptr+1,"$*;|");
+  
+  if (op && op<end) { // if operator in expression
+      //printf("op: %c\n",*op);
+      switch(*op) {
+        case ';':
+          t->type=SEQUENCE_COMMAND;
+          break;
+        case '$':
+          t->type=OR_COMMAND;
+          break;
+        case '*':
+          t->type=AND_COMMAND;
+          break;
+        case '|':
+          t->type=PIPE_COMMAND;
+          break;
+        default:
+          error(1,0,"illegal operator detected");
+          //should not get here
+          break;
+        }
+      printf("complex command type%d: %.*s %.*s\n", t->type, op-start, start,end-op,op+1);
+      //t->u.command=(command_t *) checked_malloc(sizeof(command_t)*2);
+      
+      t->u.command[0]=parseCmd(start,op-1);
+      t->u.command[1]=parseCmd(op+1,end);
+      
+    
+  } else if (subshell) { //if subshell
+      printf("subshell command\n");
+    t->type=SUBSHELL_COMMAND;
+    t->u.subshell_command=(command_t) checked_malloc(sizeof(command_t));
+    t->u.subshell_command=parseCmd(start+1,ptr-1);
+  } else { //simple command with no op and no subshell
+      printf("simple command\n");
+      t->type=SIMPLE_COMMAND;
+      //t->u.word=(char **) checked_malloc(sizeof(char *));
+      char c;
+      
+      bool inmode=false,
+        outmode=false;
+     
+      int ct=0;//character count tracker for word
+      int wdct=0;//word count tracker
+
+      //construct the simple command struct from str - check for redirections
+      ptr=start;
+      
+      while (ptr<=end) {
+
+        c=*ptr;
+
+        bool isEnd=ptr==end;
+        printf("sc iteration (char %c, in:%d, out: %d): %d\n",c,inmode,outmode,ct);
+
+        if (isEnd) ct++;
+
+        if (isWordChar(c) && !isEnd)
+          ct++;
+        else { //word ended - allocate it in command struct
+
+          if (ct>0 || isEnd) {
+            
+            char *wstart = ptr-ct;
+            if (isEnd)wstart++;
+            printf("allocating:%.*s\n", ct, wstart);
+            if (inmode) {
+              t->input=(char *) checked_malloc(ct+1);
+              t->input[ct]='\0';
+              memcpy(t->input,wstart,ct);
+              inmode=false;
+            } else if (outmode) {
+              t->output=(char *) checked_malloc(ct+1);
+              t->output[ct]='\0';
+              memcpy(t->output,wstart,ct);
+              outmode=false;
+            } else {
+              //if (wdct>0) {
+              t->u.word=(char **) checked_realloc(t->u.word,sizeof(char *) * (wdct+1));
+              //}
+              char *cw=t->u.word[wdct];
+              cw=(char *) checked_malloc(ct+2);
+              cw[ct]='\0';
+              cw[ct+1]='\0';
+
+              memcpy(cw,wstart,ct);
+              printf("%s after memcpy with wdct %d, ct %d\n",t->u.word[wdct],wdct,ct);
+              wdct++;
+            }
+          }
+          ct=0;
+          if (c=='>')
+            outmode=true;
+          if (c=='<')
+            inmode=true;   
+        }
+        ptr++;
+      }    
+    }
+  return t;
+}
+
+
+
 command_stream_t
 make_command_stream(int (*get_next_byte) (void *),
          void *get_next_byte_argument)
@@ -329,7 +317,7 @@ make_command_stream(int (*get_next_byte) (void *),
   //building the stream string
   int lineNum = 1;
   
-  printf("Step 1: Building the buffer string.\n");
+  //printf("Step 1: Building the buffer string.\n");
   char currChar; 
   char* buffer = (char*) checked_malloc(sizeof(char));
   int bufferSize = 0;
@@ -363,17 +351,17 @@ make_command_stream(int (*get_next_byte) (void *),
     buffer = (char*)checked_realloc(buffer, bufferSize+1);
   }
   buffer[bufferSize] = '\0';
-  printf("Step 1: Buffer Built \n%s\n Strlen(buffer) = %d, bufferSize = %d\n", buffer, strlen(buffer), bufferSize);
+  //printf("Step 1: Buffer Built \n%s\n Strlen(buffer) = %d, bufferSize = %d\n", buffer, strlen(buffer), bufferSize);
   
   
-  printf("Step 2: Clean up iteration started.\n");
+  //printf("Step 2: Clean up iteration started.\n");
   lineNum = 1;
   int prev = -1;
   int curr = nextIndex(buffer, bufferSize, -1);
   int next = nextIndex(buffer, bufferSize, curr);
   while (curr < bufferSize)
   {
-    printf("Step 2: prev = %d, curr = %d, next = %d.\n", prev, curr, next);
+    //printf("Step 2: prev = %d, curr = %d, next = %d.\n", prev, curr, next);
     switch (buffer[curr])
     {
       case ';':
@@ -448,9 +436,9 @@ make_command_stream(int (*get_next_byte) (void *),
     curr = next;
     next = nextIndex(buffer, bufferSize, curr);  
   }
-  printf("Step 2: Buffer cleaned \n%s\n Strlen(buffer) = %d, bufferSize = %d\n", buffer, strlen(buffer), bufferSize);
+  //printf("Step 2: Buffer cleaned \n%s\n Strlen(buffer) = %d, bufferSize = %d\n", buffer, strlen(buffer), bufferSize);
   
-  printf("Step 3: Parenthesis check start.\n");
+  //printf("Step 3: Parenthesis check start.\n");
   int stackSize = 0;
   int i;
   for (i = 0; i < bufferSize; i++)
@@ -475,9 +463,9 @@ make_command_stream(int (*get_next_byte) (void *),
   {
     error(1,0,"Syntax error (Unbalanced parenthesis found)");
   }
-  printf("Step 3: Parenthesis check complete.\n");
+  //printf("Step 3: Parenthesis check complete.\n");
   
-  printf("Step 4: Outputting\n");
+  //printf("Step 4: Outputting\n");
   command_stream_t cstream = (command_stream_t) checked_malloc(sizeof(struct command_stream));
   cstream->stream = buffer;
   cstream->index = 0;
@@ -507,6 +495,7 @@ read_command_stream (command_stream_t s)
     //printf("%c",c);
     s->index=endptr - s->stream;
     //printf("index: %d,len: %d\n",s->index,l);
+    //printf("cmd::: %.*s\n", endptr-start,start);
     return parseCmd(start,endptr-1);
   }
   return NULL;
