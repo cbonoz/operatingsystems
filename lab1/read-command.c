@@ -61,12 +61,14 @@ isSpecial(char c) {
 }
 
 bool 
-isOperator(char *c) {
-  switch(*c) {
+isOperator(char c) {
+  switch(c) {
     case '$'://||
     case '*'://&&
     case ';':
     case '|':
+    case '>':
+    case '<':
       return true;
       break;
     default:
@@ -275,90 +277,214 @@ if (isOperator(b)): newline=space
       else if (b==")"): newline=";"
       if (b==word): newline==";"
 */
-char *
-replace(char *p) {
-  char b=*(p-1);
-  switch(*p) {
-    case '&':
-      if (*(p+1)=='&') {
-        *(p+1)=' ';
-        *p='*';
-      } else {
-        error(1,0,"Illegal single & found");
-      }
-      break;
-    case '|':
-      if (*(p+1)=='|') {
-        *(p+1)=' ';
-        *p='$';
-      }
-      break;
-    case '\n':
-      if (isOperator(p-1)) *p=' ';
-      else if (b=='(') *p=' ';
-      else if (b==')') *p=';';
-      else if (isWordChar(b)) *p==';';
-      else if (*(p+1)=='\n') {
-        //printf("\n2 newlines detected");
-        *p=='@';
-        *(p+1)==' ';
-      }
-      else *p=' ';
-      break;
-    case '#':
-      *p=' ';
-      while (*++p != '\n') {
-        *p=' ';
-      }
-      break;
-    case '\t':
-      *p=' ';
-      break;
 
+
+bool isCharValid(char currChar)
+{
+  if(isWordChar(currChar))
+    return true;
+  switch (currChar){
+    case '#':
+    case ';':
+    case ' ':
+    case '\t':
+    case '\n':
+    case '|':
+    case '&':
+    case '(':
+    case ')':
+    case '<':
+    case '>':
+      return true;
   }
-  return p+1;
+  return false;
+}
+
+int nextIndex(char* buffer, int bufferSize, int i)
+{
+  i++;
+  while ((i < bufferSize) && ((buffer[i] == '\t') || (buffer[i] == ' ')))
+  {
+    i++;
+  }
+  return i;
+}
+
+int nextNonwhitespace(char* buffer, int bufferSize, int i)
+{
+  i = nextIndex(buffer, bufferSize, i);
+  while (buffer[i] == '\n')
+  {
+    i = nextIndex(buffer, bufferSize, i);
+  }
+  return i;
 }
 
 
-//LIU building this
 command_stream_t
 make_command_stream(int (*get_next_byte) (void *),
-		     void *get_next_byte_argument)
+         void *get_next_byte_argument)
 {
-  command_stream_t t=(command_stream_t) checked_malloc(sizeof(struct command_stream));
-
-  int i=0;
-  char c;
-
-  char *str=(char *) checked_malloc(1);
-  while (!feof(get_next_byte_argument)) {
-    char c=get_next_byte(get_next_byte_argument);
-    str[i++]=c;
-    str=(char *) checked_realloc(str, sizeof(char)*(i+1));
+  
+  //building the stream string
+  int lineNum = 1;
+  
+  printf("Step 1: Building the buffer string.\n");
+  char currChar; 
+  char* buffer = (char*) checked_malloc(sizeof(char));
+  int bufferSize = 0;
+  while((currChar = get_next_byte(get_next_byte_argument)) != EOF)
+  {
+    if(currChar == '\n')
+    {
+      lineNum++;
+    }
+    if(!isCharValid(currChar))
+    {
+      error(1,0,"%d: Syntax error (Illegal character %c found.) \n", lineNum, currChar);
+    }
+    else if (currChar == '#')
+    {
+      //while(currChar != '\n' && currChar != EOF)
+      while((currChar = get_next_byte(get_next_byte_argument)) != EOF && currChar != '\n')
+      {
+      }
+      if(feof(get_next_byte_argument))
+      {
+        error(1,0,"%d: Syntax error (Comments need to be terminated with new line)\n", lineNum);
+      }
+      else
+      {
+        lineNum++;
+      }
+    }
+    buffer[bufferSize] = currChar;
+    bufferSize++;
+    buffer = (char*)checked_realloc(buffer, bufferSize+1);
   }
-  str[i-1]='\0';
-  char *ptr=str;
-  while ((ptr=strpbrk(ptr,"#&|\n")) && ptr<str+i) {
-    //printf("found %c",*ptr);
-    ptr=replace(ptr);
+  buffer[bufferSize] = '\0';
+  printf("Step 1: Buffer Built \n%s\n Strlen(buffer) = %d, bufferSize = %d\n", buffer, strlen(buffer), bufferSize);
+  
+  
+  printf("Step 2: Clean up iteration started.\n");
+  lineNum = 1;
+  int prev = -1;
+  int curr = nextIndex(buffer, bufferSize, -1);
+  int next = nextIndex(buffer, bufferSize, curr);
+  while (curr < bufferSize)
+  {
+    printf("Step 2: prev = %d, curr = %d, next = %d.\n", prev, curr, next);
+    switch (buffer[curr])
+    {
+      case ';':
+      case '>':
+      case '<':
+        if ((prev==-1) || (nextNonwhitespace(buffer, bufferSize, curr) == bufferSize)
+          ||(isOperator(buffer[prev])) || (isOperator(buffer[next])))
+        {
+          error(1,0,"%d: Syntax error (Incomplete operators %c found)\n", lineNum, buffer[curr]);
+        }
+        break;        
+      case '&':
+        if (buffer[next] == '&' && next-curr == 1)
+        {
+          buffer[curr] = '*';
+          buffer[next] = ' ';
+          next = nextIndex(buffer, bufferSize, curr);
+          
+          if ((prev==-1) || (nextNonwhitespace(buffer, bufferSize, curr)==bufferSize)
+            ||(isOperator(buffer[prev])) || (isOperator(buffer[next])))
+          {
+            error(1,0,"%d: Syntax error (Incomplete operators %c found)\n", lineNum, buffer[curr]);
+          }
+        }
+        else
+        {
+          error(1,0,"%d: Syntax error (Incomplete operators %c found)\n", lineNum, buffer[curr]); 
+        }
+        break;  
+      case '|':
+        if (buffer[next] == '|' && next-curr == 1)
+        {
+          buffer[curr] = '$';
+          buffer[next] = ' ';
+          next = nextIndex(buffer, bufferSize, curr);
+        }
+        if ((prev==-1) || (nextNonwhitespace(buffer, bufferSize, curr)==bufferSize)
+          ||(isOperator(buffer[prev])) || (isOperator(buffer[next])))
+        {
+          error(1,0,"%d: Syntax error (Incomplete operators %c found)\n", lineNum, buffer[curr]);
+        }
+        break;
+      case '\n':
+        if (buffer[next] == '\n')
+        {
+          buffer[curr] = '@';
+          buffer[next] = ' ';
+          lineNum++;
+          next = nextIndex(buffer, bufferSize, curr);
+        }
+        if ((prev!=-1) && (buffer[prev] == '<' || buffer[prev] == '>'))
+        {
+          error(1,0,"%d: Syntax error (New line character can only follow tokens other than < >.)\n", lineNum);
+        }
+        else if ((next!=bufferSize)
+          && (!(buffer[next] == '(' || buffer[next]==')' || isWordChar(buffer[next]))))
+        {
+          error(1,0,"%d, Syntax error (New line character can only be followed by (, ), or Words.)\n", lineNum);
+        }
+        else if ((prev!=-1) && (next!=bufferSize) && ((isOperator(buffer[prev])) || (buffer[prev]=='(')))
+        {
+          buffer[curr] = ' ';
+        }
+        else if ((prev!=-1) && (next!=bufferSize) && ((isWordChar(buffer[prev])) || (buffer[prev]==')')))
+        {
+          buffer[curr] = ';';
+        }
+        lineNum++;
+        break;
+    }
+    prev = curr;
+    curr = next;
+    next = nextIndex(buffer, bufferSize, curr);  
   }
-  if (debug) {
-  printf("pre: \n%s\n", str);
-  printf("post: %s\n", str);
+  printf("Step 2: Buffer cleaned \n%s\n Strlen(buffer) = %d, bufferSize = %d\n", buffer, strlen(buffer), bufferSize);
+  
+  printf("Step 3: Parenthesis check start.\n");
+  int stackSize = 0;
+  int i;
+  for (i = 0; i < bufferSize; i++)
+  {
+    if (buffer[i] == '(')
+    {
+      stackSize++;
+    }
+    else if (buffer[i] == ')')
+    {
+      if(stackSize > 0)
+      {
+        stackSize--;
+      }
+      else
+      {
+        error(1,0,"Syntax error (Unbalanced parenthesis found)\n");
+      }
+    }
   }
-
-  t->stream=str;
-  t->index=0;
-  return t;
-
+  if (stackSize > 0)
+  {
+    error(1,0,"Syntax error (Unbalanced parenthesis found)");
+  }
+  printf("Step 3: Parenthesis check complete.\n");
+  
+  printf("Step 4: Outputting\n");
+  command_stream_t cstream = (command_stream_t) checked_malloc(sizeof(struct command_stream));
+  cstream->stream = buffer;
+  cstream->index = 0;
+  printf("Buffer: %s\n\n", buffer);
+  
+  return cstream;
 }
-
-
-/*read command stream will take the cleaned up version
-of the file stream and return a command_t tree. The tree will spit out the commands in order.
-*/
-//build a stack of commands pop
-
 
 
 command_t
@@ -384,14 +510,6 @@ read_command_stream (command_stream_t s)
     return parseCmd(start,endptr-1);
   }
   return NULL;
-  /*
-  if (!s) 
-    return NULL;
 
-  command_t c = &(s->cmd);
-  s=s->next;
-
-  return c;
-  */
 
 }
