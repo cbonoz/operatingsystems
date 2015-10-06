@@ -161,37 +161,18 @@ int nextNonwhitespace(char* buffer, int bufferSize, int i)
   return i;
 }
 
-
 /*
-parseCmd
-@param start - pointer to command string start
-@param end - pointer to command string end
-@return command_t - pointer to allocated memory with the defined/parsed command
+findSplitOperator
+@param ptr pointer to start of str
+@return ptr to end of string if no non-subshell operator is found, 
+  otherwise pointer to lowest precendencenon-subshell operator
 */
-
-
-command_t 
-parseCmd(char *start, char *end) {
-  if (start>end || iters++>MAXITER) return NULL;
-  start=skipWs(start);
-
-  printf("parsing: %.*s \n", end-start+1, start);
-
-  command_t t = (command_t) checked_malloc(sizeof(struct command));
-
-  char *ptr=start;
-  
-  
-  bool subshell=false;
-
-  
-
+char *
+findNextOperator(char *ptr, char *end) {
+  ptr=skipWs(ptr);
   if (*ptr=='(') { //opening of subshell
     subshell=true;
     int openparen=1;
-    ////printf("subshell detected\n");
-
-    //find end of subshell
     while (openparen>0) {
       ptr++;
       char c=*ptr;
@@ -202,10 +183,41 @@ parseCmd(char *start, char *end) {
       }
     } 
   }
+  char *op=strpbrk(ptr,";$*|");
+  return op;
+  
+}
+/*
+parseCmd
+@param start - pointer to command string start
+@param end - pointer to command string end
+@return command_t - pointer to allocated memory with the defined/parsed command
+*/
+command_t 
+parseCmd(char *start, char *end) {
+  if (start>end || iters++>MAXITER) return NULL;
+  start=skipWs(start);
 
+  printf("parsing: %.*s \n", end-start+1, start);
+
+  command_t t = (command_t) checked_malloc(sizeof(struct command));
+
+  char *ptr=start;
+  char *split=ptr;
+  ptr=findNextOperator(ptr)
+  while (ptr<=end) {
+    if (higher)
+    ptr=findNextOperator(ptr)
+  }
+  
+  //bool subshell=false;
 
   
-  char *op=strpbrk(ptr+1,"$*;|");
+  
+  char *op=findSplitOperator(ptr,end)
+  bool subshell = start=='(' && op==')' ? true : false;
+
+
   
   if (op && op<end) { // if operator in expression
       ////printf("op: %c\n",*op);
@@ -227,7 +239,7 @@ parseCmd(char *start, char *end) {
           //should not get here
           break;
         }
-      //printf("complex command type%d: %.*s %.*s\n", t->type, op-start, start,end-op,op+1);
+      printf("complex command type%d: %.*s,%.*s\n", t->type, op-start, start,end-op,op+1);
       //t->u.command=(command_t *) checked_malloc(sizeof(command_t)*2);
       
       t->u.command[0]=parseCmd(start,op-1);
@@ -261,16 +273,16 @@ parseCmd(char *start, char *end) {
         bool isEnd=ptr==end;
         //printf("sc iteration (char %c, in:%d, out: %d): %d\n",c,inmode,outmode,ct);
 
-        
+        if (isEnd) ct++;
 
         if (isWordChar(c) && !isEnd)
           ct++;
         else { //word ended - allocate it in command struct
-
           if (ct>0 || isEnd) {
-            if (isEnd) ct++;
+            
+            //else if (isEnd) ptr=
             char *wstart = ptr-ct;
-            if (isEnd)wstart++;
+            if (isEnd) wstart++;
             //printf("allocating:%.*s\n", ct, wstart);
             if (inmode) {
               t->input=(char *) checked_malloc(ct+1);
@@ -301,6 +313,15 @@ parseCmd(char *start, char *end) {
         ptr++;
       }    
     }
+    /*
+    printf("end of read command\ninput: %s, output: %s, ", t->input, t->output);
+      char **ww = t->u.word;
+        printf ("[%s", *ww);
+        while (*++ww)
+          printf (", %s", *ww);
+       printf("]\n");
+    printf("return from read\n");
+    */
   
   return t;
 }
@@ -489,7 +510,7 @@ make_command_stream(int (*get_next_byte) (void *),
   return cstream;
 }
 
-
+static int j=0;
 
 command_t
 read_command_stream (command_stream_t s)
@@ -503,18 +524,18 @@ read_command_stream (command_stream_t s)
     start++;
   }
 
-  if (s->index<l) {
-    char *endptr=start+s->index;
-    char c=*endptr;
-    while (c != ENDCHAR && c!='\0')
-        c=*++endptr;
-    ////printf("%c",c);
-    s->index=endptr - s->stream;
-    ////printf("index: %d,len: %d\n",s->index,l);
-    ////printf("cmd::: %.*s\n", endptr-start,start);
-    return parseCmd(start,endptr-1);
-  }
-  return NULL;
+  
+  char *endptr=start+s->index;
+  char c=*endptr;
+  while (c != ENDCHAR && c!='\0')
+      c=*++endptr;
+  ////printf("%c",c);
+  s->index=endptr - s->stream;
+  ////printf("index: %d,len: %d\n",s->index,l);
+  printf("read_stream %d(index,l) (%d, %d)::: %.*s\n", j++,s->index,l,endptr-start,start);
+  return start<endptr ? parseCmd(start,endptr-1) : NULL;
+  
+  
 
 
 }

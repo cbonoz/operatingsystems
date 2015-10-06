@@ -1,1 +1,6 @@
-g++ -c foo.c a #currently segfault
+(b &&c) || (a && d)
+
+
+sadfsa
+
+safsf
