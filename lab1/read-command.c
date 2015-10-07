@@ -228,7 +228,7 @@ parseCmd(char *start, char *end) {
   if (start>end || iters++>MAXITER) return NULL;
   start=skipWs(start);
 
-  if (debug) printf("parsing: %.*s \n", end-start+1, start);
+  //if (debug) printf("parsing: %.*s \n", end-start+1, start);
   command_t t = (command_t) checked_malloc(sizeof(struct command));
   char *ptr = start;
   //char *op = findNextOperator(ptr);
@@ -361,7 +361,7 @@ parseCmd(char *start, char *end) {
               t->u.word[wdct]=(char *) checked_malloc(wsize);
               memcpy(t->u.word[wdct],wstart,ct);
               t->u.word[wdct][ct]='\0';
-              if (debug) printf("\ncreate word: %s - asize: %d, wsize: %d, wdct: %d\n",*(t->u.word+wdct),asize,wsize,wdct);
+              // if (debug) printf("\ncreate word: %s - asize: %d, wsize: %d, wdct: %d\n",*(t->u.word+wdct),asize,wsize,wdct);
               wdct++;
             }
             
