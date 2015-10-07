@@ -76,6 +76,9 @@ isOperator(char c) {
   }
 }
 
+/*
+isWordChar returns false for spaces
+*/
 bool
 isWordChar(char c) {
   return isalnum(c) || isSpecial(c);
@@ -329,7 +332,9 @@ parseCmd(char *start, char *end) {
             //else if (isEnd) ptr=
             char *wstart = ptr-ct;
             if (isEnd) wstart++;
+            if (c==' ' && *(wstart-1)!=' ') wstart--;
             ////printf("allocating:%.*s\n", ct, wstart);
+            if (debug) printf("\ncreating word:%.*s",ct,wstart);
             if (inmode) {
               t->input=(char *) checked_malloc(ct+1);
               t->input[ct]='\0';
