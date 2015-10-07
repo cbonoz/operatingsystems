@@ -243,11 +243,15 @@ parseCmd(char *start, char *end) {
     int opPrec = strchr(prec, *op) - prec;
     int nextPrec = strchr(prec, *next) - prec;
     //printf("parsing: [while] opPrec = %d nextPrec = %d \n", opPrec, nextPrec);
-    if (!((opPrec == 1 || opPrec == 2) && (nextPrec == 1 || nextPrec == 2)))
+    if (((opPrec == 1 || opPrec == 2) && (nextPrec == 1 || nextPrec == 2)))
     {
-      if (nextPrec < opPrec)
-        op = next;
+    	op = next;
     }   
+    else
+    {
+    	if (nextPrec < opPrec)
+        	op = next;
+	}   
     //printf("parsing: [while] start = %c op = %c next = %c \n", *ptr, *op, *next);
     //next = findNextOperator(++next);
     next = strpbrk(skipSubshell(++next), ";$*|");
