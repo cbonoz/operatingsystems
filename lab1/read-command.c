@@ -1,5 +1,6 @@
 // UCLA CS 111 Lab 1 command reading
 
+
 #include "command.h"
 #include "command-internals.h"
 #include "alloc.h"
@@ -228,7 +229,6 @@ parseCmd(char *start, char *end) {
   start=skipWs(start);
 
   if (debug) printf("parsing: %.*s \n", end-start+1, start);
-
   command_t t = (command_t) checked_malloc(sizeof(struct command));
   char *ptr = start;
   //char *op = findNextOperator(ptr);
@@ -314,27 +314,31 @@ parseCmd(char *start, char *end) {
 
       //construct the simple command struct from str - check for redirections
       ptr=start;
+      bool isEnd=false;
       
       while (ptr<=end) {
         
         c=*ptr;
 
-        bool isEnd=ptr==end;
+
         if (debug) printf("sc iteration (char %c, in:%d, out: %d): %d\n",c,inmode,outmode,ct);
 
-        if (isEnd && isWordChar(c)) ct++;
+        
 
-        if (isWordChar(c) && !isEnd) {
+        if (isWordChar(c)) {
           ct++;
-        } else { //word ended - allocate it in command struct
-          
-          if (ct>0 || isEnd) {
-            //else if (isEnd) ptr=
-            char *wstart = ptr-ct;
-            if (isEnd) wstart++;
-            if (c==' ' && *(wstart-1)!=' ') wstart--;
+        } 
+        isEnd=(ptr==end);
+        if (!isWordChar(c) || isEnd) { //word ended - allocate it in command struct  
+          if (ct>0) {
+            //char *wend=ptr-1;
+            
+            char *wstart=ptr-ct;
+            if (isEnd && isWordChar(c)) wstart++;
+
+            //if (c==' ' && *(wstart-1)!=' ') wstart--;
             ////printf("allocating:%.*s\n", ct, wstart);
-            if (debug) printf("\ncreating word:%.*s",ct,wstart);
+            if (debug) printf("creating word[%c,%c]:%.*s, ct:%d, isEnd: %d\n",*wstart,*(ptr-1),ct,wstart,ct,isEnd);
             if (inmode) {
               t->input=(char *) checked_malloc(ct+1);
               t->input[ct]='\0';
@@ -353,13 +357,12 @@ parseCmd(char *start, char *end) {
               t->u.word[wdct]=(char *) checked_malloc(wsize);
               memcpy(t->u.word[wdct],wstart,ct);
               t->u.word[wdct][ct]='\0';
-              if (debug) printf("\ncreate word: %s - asize: %d, wsize: %d\n",*(t->u.word+wdct),asize,wsize);
+              if (debug) printf("\ncreate word: %s - asize: %d, wsize: %d, wdct: %d\n",*(t->u.word+wdct),asize,wsize,wdct);
               wdct++;
             }
             
-            
           }
-          ct=0;   
+          ct=0;  
         }
         //check for redirection char
         if (c=='>')
@@ -368,8 +371,10 @@ parseCmd(char *start, char *end) {
           inmode=true;   
         
         ptr++;
+        //ptr=skipWs(ptr);
       }
-      *(t->u.word+wdct)=NULL;  
+      if (wdct)
+        *(t->u.word+wdct)=NULL;  
     }
 
 
@@ -579,7 +584,7 @@ read_command_stream (command_stream_t s)
   s->index=endptr - s->stream;
   //////printf("index: %d,len: %d\n",s->index,l);
   //printf("read_stream %d(index,l) (%d, %d)::: %.*s\n", j++,s->index,l,endptr-start,start);
-  return start<endptr ? parseCmd(start,endptr-1) : NULL;
+  return s->index<=l? parseCmd(start,endptr-1) : NULL;
   
   
 

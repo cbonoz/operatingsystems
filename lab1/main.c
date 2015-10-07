@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "command.h"
+#include "command-internals.h"
 
 static char const *program_name;
 static char const *script_name;
@@ -76,7 +77,7 @@ main (int argc, char **argv)
   	{
   	  printf ("# %d\n", command_number++);
   	  print_command (command);
-      //printf("\n%d\n",command_stream->index);
+      
   	}
     else
   	{

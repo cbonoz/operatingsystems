@@ -19,7 +19,7 @@ command_indented_print (int indent, command_t c)
 	command_indented_print (indent + 2 * (c->u.command[0]->type != c->type),
 				c->u.command[0]);
 	static char const command_label[][3] = { "&&", ";", "||", "|" };
-	printf ("\\\n%*s%s\n", indent, "", command_label[c->type]);
+	printf (" \\\n%*s%s\n", indent, "", command_label[c->type]);
 	command_indented_print (indent + 2 * (c->u.command[1]->type != c->type),
 				c->u.command[1]);
 	break;
