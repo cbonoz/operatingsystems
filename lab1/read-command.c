@@ -224,7 +224,7 @@ parseCmd(char *start, char *end) {
   if (start>end || iters++>MAXITER) return NULL;
   start=skipWs(start);
 
-  printf("parsing: %.*s \n", end-start+1, start);
+  if (debug) printf("parsing: %.*s \n", end-start+1, start);
 
   command_t t = (command_t) checked_malloc(sizeof(struct command));
   char *ptr = start;
@@ -317,7 +317,7 @@ parseCmd(char *start, char *end) {
         c=*ptr;
 
         bool isEnd=ptr==end;
-        printf("sc iteration (char %c, in:%d, out: %d): %d\n",c,inmode,outmode,ct);
+        if (debug) printf("sc iteration (char %c, in:%d, out: %d): %d\n",c,inmode,outmode,ct);
 
         if (isEnd && isWordChar(c)) ct++;
 
@@ -325,7 +325,7 @@ parseCmd(char *start, char *end) {
           ct++;
         } else { //word ended - allocate it in command struct
           
-          if (ct>1 || isEnd) {
+          if (ct>0 || isEnd) {
             //else if (isEnd) ptr=
             char *wstart = ptr-ct;
             if (isEnd) wstart++;
@@ -348,7 +348,7 @@ parseCmd(char *start, char *end) {
               t->u.word[wdct]=(char *) checked_malloc(wsize);
               memcpy(t->u.word[wdct],wstart,ct);
               t->u.word[wdct][ct]='\0';
-              printf("\ncreate word: %s - asize: %d, wsize: %d\n",*(t->u.word+wdct),asize,wsize);
+              if (debug) printf("\ncreate word: %s - asize: %d, wsize: %d\n",*(t->u.word+wdct),asize,wsize);
               wdct++;
             }
             
@@ -546,7 +546,7 @@ make_command_stream(int (*get_next_byte) (void *),
   command_stream_t cstream = (command_stream_t) checked_malloc(sizeof(struct command_stream));
   cstream->stream = buffer;
   cstream->index = 0;
-  printf("Buffer: %s\n", buffer);
+  if (debug) printf("Buffer: %s\n", buffer);
   
   return cstream;
 }
