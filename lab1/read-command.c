@@ -171,7 +171,7 @@ char *
 findNextOperator(char *ptr, char *end) {
   ptr=skipWs(ptr);
   if (*ptr=='(') { //opening of subshell
-    subshell=true;
+    
     int openparen=1;
     while (openparen>0) {
       ptr++;
@@ -185,6 +185,32 @@ findNextOperator(char *ptr, char *end) {
   }
   char *op=strpbrk(ptr,";$*|");
   return op;
+  
+}
+
+char *
+skipSubshell(char *ptr) {
+  ptr=skipWs(ptr);
+  ////printf("skipSubshell - after skipW: %s\n", ptr);
+  if (*ptr=='(') { //opening of subshell
+    //subshell=true;
+    int openparen=1;
+    while (openparen>0) {
+      ptr++;
+      char c=*ptr;
+      if (c == '(') {
+        openparen++;
+      } else if (c==')') {
+        openparen--;
+      }
+    } 
+  }
+  //if(ptr!='\0')
+  //  ptr++;
+  ////printf("skipSubshell - after skipS: %s\n", ptr);
+  //char *op = strpbrk(ptr,";$*|");
+  ////printf("findNextOperator: %c\n", *op);
+  return ptr;
   
 }
 /*
@@ -201,26 +227,45 @@ parseCmd(char *start, char *end) {
   printf("parsing: %.*s \n", end-start+1, start);
 
   command_t t = (command_t) checked_malloc(sizeof(struct command));
-
-  char *ptr=start;
-  char *split=ptr;
-  ptr=findNextOperator(ptr)
-  while (ptr<=end) {
-    if (higher)
-    ptr=findNextOperator(ptr)
+  char *ptr = start;
+  //char *op = findNextOperator(ptr);
+  char *op = strpbrk(skipSubshell(ptr), ";$*|");
+  char *next = op;
+  
+  ////printf("parsing: start = %c op = %c next = %c \n", *ptr, *op, *next);
+  
+  while (next && next <= end) { 
+    
+    char * prec = ";$*|";
+    int opPrec = strchr(prec, *op) - prec;
+    int nextPrec = strchr(prec, *next) - prec;
+    //printf("parsing: [while] opPrec = %d nextPrec = %d \n", opPrec, nextPrec);
+    if (!((opPrec == 1 || opPrec == 2) && (nextPrec == 1 || nextPrec == 2)))
+    {
+      if (nextPrec < opPrec)
+        op = next;
+    }   
+    //printf("parsing: [while] start = %c op = %c next = %c \n", *ptr, *op, *next);
+    //next = findNextOperator(++next);
+    next = strpbrk(skipSubshell(++next), ";$*|");
+    
   }
+  if (op) {
+    //printf("parsing: lowest precedence operator is %c", *op);
+  }
+  
   
   //bool subshell=false;
 
   
-  
+  /*
   char *op=findSplitOperator(ptr,end)
   bool subshell = start=='(' && op==')' ? true : false;
-
+  */
 
   
   if (op && op<end) { // if operator in expression
-      ////printf("op: %c\n",*op);
+      //////printf("op: %c\n",*op);
       switch(*op) {
         case ';':
           t->type=SEQUENCE_COMMAND;
@@ -239,20 +284,21 @@ parseCmd(char *start, char *end) {
           //should not get here
           break;
         }
-      printf("complex command type%d: %.*s,%.*s\n", t->type, op-start, start,end-op,op+1);
+      //printf("\ncomplex command type%d: %.*s,%.*s\n", t->type, op-start, start,end-op,op+1);
       //t->u.command=(command_t *) checked_malloc(sizeof(command_t)*2);
       
       t->u.command[0]=parseCmd(start,op-1);
       t->u.command[1]=parseCmd(op+1,end);
       
     
-  } else if (subshell) { //if subshell
+  } else if (*start == '(') { //if subshell
       //printf("subshell command\n");
+      ptr = skipSubshell(ptr);
     t->type=SUBSHELL_COMMAND;
     t->u.subshell_command=(command_t) checked_malloc(sizeof(command_t));
     t->u.subshell_command=parseCmd(start+1,ptr-1);
   } else { //simple command with no op and no subshell
-      //printf("simple command\n");
+      ////printf("simple command\n");
       t->type=SIMPLE_COMMAND;
       //t->u.word=(char **) checked_malloc(sizeof(char *));
       char c;
@@ -267,68 +313,63 @@ parseCmd(char *start, char *end) {
       ptr=start;
       
       while (ptr<=end) {
-
+        
         c=*ptr;
 
         bool isEnd=ptr==end;
-        //printf("sc iteration (char %c, in:%d, out: %d): %d\n",c,inmode,outmode,ct);
+        printf("sc iteration (char %c, in:%d, out: %d): %d\n",c,inmode,outmode,ct);
 
-        if (isEnd) ct++;
+        if (isEnd && isWordChar(c)) ct++;
 
-        if (isWordChar(c) && !isEnd)
+        if (isWordChar(c) && !isEnd) {
           ct++;
-        else { //word ended - allocate it in command struct
-          if (ct>0 || isEnd) {
-            
+        } else { //word ended - allocate it in command struct
+          
+          if (ct>1 || isEnd) {
             //else if (isEnd) ptr=
             char *wstart = ptr-ct;
             if (isEnd) wstart++;
-            //printf("allocating:%.*s\n", ct, wstart);
+            ////printf("allocating:%.*s\n", ct, wstart);
             if (inmode) {
               t->input=(char *) checked_malloc(ct+1);
               t->input[ct]='\0';
               memcpy(t->input,wstart,ct);
               inmode=false;
+
             } else if (outmode) {
               t->output=(char *) checked_malloc(ct+1);
               t->output[ct]='\0';
               memcpy(t->output,wstart,ct);
               outmode=false;
             } else {
-  
-              t->u.word=(char **) checked_realloc(t->u.word,sizeof(char *) * (wdct+1));
-              t->u.word[wdct]=(char *) checked_malloc(ct+1);
+              size_t asize=sizeof(char *) * (wdct+2);
+              size_t wsize=ct+1;
+              t->u.word=(char **) checked_realloc(t->u.word,asize);
+              t->u.word[wdct]=(char *) checked_malloc(wsize);
               memcpy(t->u.word[wdct],wstart,ct);
               t->u.word[wdct][ct]='\0';
-              printf("%s after memcpy with wdct %d, ct %d\n",*(t->u.word+wdct),wdct,ct);
+              printf("\ncreate word: %s - asize: %d, wsize: %d\n",*(t->u.word+wdct),asize,wsize);
               wdct++;
             }
+            
+            
           }
-          ct=0;
-          if (c=='>')
-            outmode=true;
-          if (c=='<')
-            inmode=true;   
+          ct=0;   
         }
+        //check for redirection char
+        if (c=='>')
+          outmode=true;
+        if (c=='<')
+          inmode=true;   
+        
         ptr++;
-      }    
+      }
+      *(t->u.word+wdct)=NULL;  
     }
-    /*
-    printf("end of read command\ninput: %s, output: %s, ", t->input, t->output);
-      char **ww = t->u.word;
-        printf ("[%s", *ww);
-        while (*++ww)
-          printf (", %s", *ww);
-       printf("]\n");
-    printf("return from read\n");
-    */
-  
+
+
   return t;
 }
-
-
-
-
 command_stream_t
 make_command_stream(int (*get_next_byte) (void *),
          void *get_next_byte_argument)
@@ -337,7 +378,7 @@ make_command_stream(int (*get_next_byte) (void *),
   //building the stream string
   int lineNum = 1;
   
-  //printf("Step 1: Building the buffer string.\n");
+  ////printf("Step 1: Building the buffer string.\n");
   char currChar; 
   char* buffer = (char*) checked_malloc(sizeof(char));
   int bufferSize = 0;
@@ -371,17 +412,17 @@ make_command_stream(int (*get_next_byte) (void *),
     buffer = (char*)checked_realloc(buffer, bufferSize+1);
   }
   buffer[bufferSize] = '\0';
-  //printf("Step 1: Buffer Built \n%s\n Strlen(buffer) = %d, bufferSize = %d\n", buffer, strlen(buffer), bufferSize);
+  ////printf("Step 1: Buffer Built \n%s\n Strlen(buffer) = %d, bufferSize = %d\n", buffer, strlen(buffer), bufferSize);
   
   
-  //printf("Step 2: Clean up iteration started.\n");
+  ////printf("Step 2: Clean up iteration started.\n");
   lineNum = 1;
   int prev = -1;
   int curr = nextIndex(buffer, bufferSize, -1);
   int next = nextIndex(buffer, bufferSize, curr);
   while (curr < bufferSize)
   {
-    //printf("Step 2: prev = %d, curr = %d, next = %d.\n", prev, curr, next);
+    ////printf("Step 2: prev = %d, curr = %d, next = %d.\n", prev, curr, next);
     switch (buffer[curr])
     {
       case ';':
@@ -472,9 +513,9 @@ make_command_stream(int (*get_next_byte) (void *),
     curr = next;
     next = nextIndex(buffer, bufferSize, curr);  
   }
-  //printf("Step 2: Buffer cleaned \n%s\n Strlen(buffer) = %d, bufferSize = %d\n", buffer, strlen(buffer), bufferSize);
+  ////printf("Step 2: Buffer cleaned \n%s\n Strlen(buffer) = %d, bufferSize = %d\n", buffer, strlen(buffer), bufferSize);
   
-  //printf("Step 3: Parenthesis check start.\n");
+  ////printf("Step 3: Parenthesis check start.\n");
   int stackSize = 0;
   int i;
   for (i = 0; i < bufferSize; i++)
@@ -499,9 +540,9 @@ make_command_stream(int (*get_next_byte) (void *),
   {
     error(1,0,"Syntax error (Unbalanced parenthesis found)");
   }
-  //printf("Step 3: Parenthesis check complete.\n");
+  ////printf("Step 3: Parenthesis check complete.\n");
   
-  //printf("Step 4: Outputting\n");
+  ////printf("Step 4: Outputting\n");
   command_stream_t cstream = (command_stream_t) checked_malloc(sizeof(struct command_stream));
   cstream->stream = buffer;
   cstream->index = 0;
@@ -525,14 +566,14 @@ read_command_stream (command_stream_t s)
   }
 
   
-  char *endptr=start+s->index;
+  char *endptr=start;
   char c=*endptr;
   while (c != ENDCHAR && c!='\0')
       c=*++endptr;
-  ////printf("%c",c);
+  //////printf("%c",c);
   s->index=endptr - s->stream;
-  ////printf("index: %d,len: %d\n",s->index,l);
-  printf("read_stream %d(index,l) (%d, %d)::: %.*s\n", j++,s->index,l,endptr-start,start);
+  //////printf("index: %d,len: %d\n",s->index,l);
+  //printf("read_stream %d(index,l) (%d, %d)::: %.*s\n", j++,s->index,l,endptr-start,start);
   return start<endptr ? parseCmd(start,endptr-1) : NULL;
   
   
