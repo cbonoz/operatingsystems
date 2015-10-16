@@ -14,7 +14,7 @@
 
 //#define N 10000
 #define ENDCHAR '@'
-#define MAXITER 1000
+#define MAXITER 10000
 
 static bool debug=0;
 static int iters=0;
@@ -217,6 +217,7 @@ char * nextWordStart(char* ptr, char* end)
 
 command_t 
 parseCmd(char *start, char *end) {
+<<<<<<< HEAD
   if (start>end || iters++>MAXITER) return NULL;
   
   //trim the start and end pointers
@@ -228,6 +229,14 @@ parseCmd(char *start, char *end) {
 
   //if (debug) printf("parsing: \"%.*s\" start = \'%c\' end = \'%c\'\n", end-start+1, start, *start, *end);
 
+=======
+  start=skipWs(start);
+  int len=end-start;
+  if (len<0 || iters++>MAXITER) return NULL;
+  
+  
+  if (debug) printf("parsing: %.*s,length:%d \n", end-start+1, start,len);
+>>>>>>> 4389fc33cfff46234900b637c3a642e5a85380dd
   command_t t = (command_t) checked_malloc(sizeof(struct command));
   char *ptr = start;
   //char *op = findNextOperator(ptr);
@@ -564,7 +573,7 @@ make_command_stream(int (*get_next_byte) (void *),
   return cstream;
 }
 
-static int j=0;
+static int j=1;
 
 command_t
 read_command_stream (command_stream_t s)
@@ -586,8 +595,16 @@ read_command_stream (command_stream_t s)
   //////printf("%c",c);
   s->index=endptr - s->stream;
   //////printf("index: %d,len: %d\n",s->index,l);
+<<<<<<< HEAD
   //if(debug) printf("read_stream %d(index,l) (%d, %d)::: \"%.*s\"\n", j++,s->index,l,endptr-start,start);
   return start<endptr ? parseCmd(start,endptr-1) : NULL;
+=======
+  
+  //if (s->index==l && !isWordChar(*start)) return NULL;
+
+  if (debug) printf("read_stream %d(index,l) (%d, %d):::%.*s\n", j++,s->index,l,endptr-start,start);
+  return (s->index<=l) ? parseCmd(start,endptr-1) : NULL;
+>>>>>>> 4389fc33cfff46234900b637c3a642e5a85380dd
   
   
 
