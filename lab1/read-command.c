@@ -221,6 +221,9 @@ parseCmd(char *start, char *end) {
   
   //trim the start and end pointers
   start=skipWs(start);
+  
+  if (*start=='\0') return NULL;
+
   while (*end == ' ' || *end == '\t' || *end == '\n')
   {
     end--;
