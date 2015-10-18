@@ -44,7 +44,20 @@ void exec_simple(command_t c, int time_travel) {
 	pid_t childpid;
 	int procStatus;
 	if (!(childpid = fork())) {
+		
+		if (c->output) {
+			FILE *fp = fopen(c->output, "w");
+			dup2((int) fp,1);//taking stdout and pointing to buffer
+			//fclose(fp);
+		}
+		if (c->input) {
+			FILE *fp = fopen(c->input, "r");
+			dup2((int) fp, 0);
+			//fclose(fp);
+		}
+
 		execvp(c->u.word[0], c->u.word);
+
 		//if child process
 	} else {
 		waitpid(childpid, &procStatus, 0);
@@ -142,6 +155,19 @@ void exec_subshell(command_t c, int time_travel) {
 	pid_t childpid;
 	int procStatus;
 	if (!(childpid = fork())) {
+		
+
+		if (c->output) {
+			FILE *fp = fopen(c->output, "w");
+			dup2((int) fp,1);//taking stdout and pointing to buffer
+			//fclose(fp);
+		}
+		if (c->input) {
+			FILE *fp = fopen(c->input, "r");
+			dup2((int) fp, 0);
+			//fclose(fp);
+		}
+
 		execute_command(c->u.subshell_command, time_travel);
 		exit(command_status(c->u.subshell_command));
 		//if child process
