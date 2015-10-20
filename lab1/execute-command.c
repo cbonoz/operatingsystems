@@ -47,12 +47,12 @@ void exec_simple(command_t c, int time_travel) {
 		
 		if (c->output) {
 			FILE *fp = fopen(c->output, "w");
-			dup2((int) fp,1);//taking stdout and pointing to buffer
+			dup2(fileno(fp),1);//taking stdout and pointing to buffer
 			//fclose(fp);
 		}
 		if (c->input) {
 			FILE *fp = fopen(c->input, "r");
-			dup2((int) fp, 0);
+			dup2(fileno(fp), 0);
 			//fclose(fp);
 		}
 
@@ -130,24 +130,34 @@ void exec_pipe(command_t c, int time_travel) {
 		exit(command_status(c->u.command[0]));
 	}
 	else {
-		//should be a wait here on left
-		if (!(right=fork())) { //this part is the child process
-			dup2(pipefd[0],0);//0 is stdin
-			close(pipefd[1]);
-			execute_command(c->u.command[1], time_travel);
-			exit(command_status(c->u.command[1]));
+		int procStatus=0; 
+		waitpid(left, &procStatus, 0);
+		//c->status = WEXITSTATUS(procStatus);
+		// c->status=WEXITSTATUS(status);
+		dup2(pipefd[0],0);//0 is stdin
+		close(pipefd[1]);
+		execute_command(c->u.command[1], time_travel);
+		//assign result of & to right side
+		c->status=command_status(c->u.command[1]);	
+		
+		// //should be a wait here on left
+		// if (!(right=fork())) { //this part is the child process
+		// 	dup2(pipefd[0],0);//0 is stdin
+		// 	close(pipefd[1]);
+		// 	execute_command(c->u.command[1], time_travel);
+		// 	exit(command_status(c->u.command[1]));
 			
-		} else {
-			int procStatus=0; 
-			int childpid = waitpid(-1,&procStatus,0);//wait on all child processes
-			if (childpid == right) { //this means the right process has finished
-				c->status = WEXITSTATUS(procStatus);//extract the childpidurn status from the status pointer from the right
-				waitpid(left,&procStatus,0);//wait for the left to finish
-			} else { //if the left process has finished
-				waitpid(right,&procStatus,0); //wait for the right
-				c->status=WEXITSTATUS(procStatus);	//childpidurn the status from the right process
-			}
-		}
+		// } else {
+		// 	int procStatus=0; 
+		// 	int childpid = waitpid(-1,&procStatus,0);//wait on all child processes
+		// 	if (childpid == right) { //this means the right process has finished
+		// 		c->status = WEXITSTATUS(procStatus);//extract the childpidurn status from the status pointer from the right
+		// 		waitpid(left,&procStatus,0);//wait for the left to finish
+		// 	} else { //if the left process has finished
+		// 		waitpid(right,&procStatus,0); //wait for the right
+		// 		c->status=WEXITSTATUS(procStatus);	//childpidurn the status from the right process
+		// 	}
+		// }
 	}
 }
 
@@ -159,12 +169,12 @@ void exec_subshell(command_t c, int time_travel) {
 
 		if (c->output) {
 			FILE *fp = fopen(c->output, "w");
-			dup2((int) fp,1);//taking stdout and pointing to buffer
+			dup2(fileno(fp),1);//taking stdout and pointing to buffer
 			//fclose(fp);
 		}
 		if (c->input) {
 			FILE *fp = fopen(c->input, "r");
-			dup2((int) fp, 0);
+			dup2(fileno(fp), 0);
 			//fclose(fp);
 		}
 
