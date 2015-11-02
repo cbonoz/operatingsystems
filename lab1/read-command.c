@@ -256,6 +256,17 @@ parseCmd(char *start, char *end) {
   //if (debug) printf("parsing: \"%.*s\" start = \'%c\' end = \'%c\'\n", end-start+1, start, *start, *end);
 
   command_t t = (command_t) checked_malloc(sizeof(struct command));
+  
+  //command initializaiton
+  t->input = '\0';
+  t->output = '\0';
+  t->status = -1;
+  t->u.command[0] = NULL;
+  t->u.command[1] = NULL;
+  t->u.word = NULL;
+  t->u.subshell_command = NULL;
+  
+
   char *ptr = start;
   //char *op = findNextOperator(ptr);
   char *op = strpbrk(skipSubshell(ptr), ";$*|");
