@@ -433,7 +433,7 @@ execute_tt(command_t *commandArr, int commandArrSize, command_t last_command) {
       }  
     }
     //print dependency matrix for testing purposes
-    print_graph(depGraph, commandArrSize);
+    //print_graph(depGraph, commandArrSize);
     
     //fork and execute from here    
     int* execTracker = (int*)checked_malloc(sizeof(int)*commandArrSize);
@@ -449,7 +449,7 @@ execute_tt(command_t *commandArr, int commandArrSize, command_t last_command) {
     while(countT < commandArrSize)
     {
       
-      printf("---\nparallelization %d started \n", x);
+      //printf("---\nparallelization %d started \n", x);
       execList = (nodei_t*)checked_malloc(sizeof(nodei_t));
       execList = NULL;
 
@@ -519,7 +519,7 @@ execute_tt(command_t *commandArr, int commandArrSize, command_t last_command) {
       //   printf("\n");
       // }
 
-      printf("\nparallelization %d completed \n", x++);
+      //printf("\nparallelization %d completed \n", x++);
       
       
     }
