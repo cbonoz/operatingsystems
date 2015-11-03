@@ -38,7 +38,7 @@ typedef struct node{
 
 typedef struct nodei{
   int data;
-  pid_t pid;
+  //pid_t pid;
   struct nodei* next;
 }nodei_t;
 
@@ -483,7 +483,7 @@ execute_tt(command_t *commandArr, int commandArrSize, command_t last_command) {
         } 
         else 
         {
-          count->pid = childpid;
+          //count->pid = childpid;
           count = count->next;
         }
       }
@@ -493,14 +493,18 @@ execute_tt(command_t *commandArr, int commandArrSize, command_t last_command) {
       while(count)
       {
         //find the last command that returned
-        pid_t p = waitpid(-1, &procStatus, 0);
-        nodei_t* n = execList;
-        while(n->pid != p)
-        {
-          n=n->next;
-        }
-        last_command = commandArr[n->data];
+        // pid_t p = waitpid(-1, &procStatus, 0);
+        // nodei_t n = execList;
+        // while(n->pid != p)
+        // {
+        //   n=n->next;
+        // }
+        // last_command = commandArr[n->data];
 
+        waitpid(-1, &procStatus, 0);
+
+        //last_command could be any of the execution from the current round
+        last_command = commandArr[count->data];
         makeRowZero(depGraph, commandArrSize, count->data);
         count = count->next;
       }  
