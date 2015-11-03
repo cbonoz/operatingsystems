@@ -19,10 +19,18 @@ command_t read_command_stream (command_stream_t stream);
 
 /* Print a command to stdout, for debugging.  */
 void print_command (command_t);
+/* print dep graph */
 
 /* Execute a command.  Use "time travel" if the integer flag is
    nonzero.  */
-void execute_command (command_t, int);
+void execute_general(command_t *commandArr, int commandArrSize, int time_travel);
+
+//execute without time travel
+void execute_command (command_t);
+//execute time travel
+void execute_tt(command_t *arr, int size);
+
+
 
 /* Return the exit status of a command, which must have previously been executed.
    Wait for the command, if it is not already finished.  */
