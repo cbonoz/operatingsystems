@@ -517,12 +517,11 @@ execute_tt(command_t *commandArr, int commandArrSize) {
 }
 
 
-void execute_general(command_t *commandArr, int commandArrSize, int time_travel) {
+void execute_general(command_t *commandArr, int commandArrSize, command_t last_command, int time_travel) {
 	if (time_travel) 
 		execute_tt(commandArr, commandArrSize);
 	else {
-		int i=0;
-		command_t last_command = NULL;
+		int i=0;	
 
 		while(commandArr[i])
 		{

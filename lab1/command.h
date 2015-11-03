@@ -23,7 +23,7 @@ void print_command (command_t);
 
 /* Execute a command.  Use "time travel" if the integer flag is
    nonzero.  */
-void execute_general(command_t *commandArr, int commandArrSize, int time_travel);
+void execute_general(command_t *commandArr, int commandArrSize, command_t last_command, int time_travel);
 
 //execute without time travel
 void execute_command (command_t);

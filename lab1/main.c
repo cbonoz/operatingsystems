@@ -104,7 +104,7 @@ main (int argc, char **argv)
   }
   else 
   {
-    execute_general(commandArr,commandArrSize, time_travel);
+    execute_general(commandArr,commandArrSize, last_command, time_travel);
   }
 
   free(command_stream);
