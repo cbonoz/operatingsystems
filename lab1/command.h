@@ -28,7 +28,7 @@ void execute_general(command_t *commandArr, int commandArrSize, command_t last_c
 //execute without time travel
 void execute_command (command_t);
 //execute time travel
-void execute_tt(command_t *arr, int size);
+void execute_tt(command_t *arr, int size, command_t last_command);
 
 
 

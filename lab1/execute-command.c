@@ -38,6 +38,7 @@ typedef struct node{
 
 typedef struct nodei{
   int data;
+  pid_t pid;
   struct nodei* next;
 }nodei_t;
 
@@ -341,7 +342,7 @@ isColZero(int** depGraph, int size, int i)
 }
 
 void
-execute_tt(command_t *commandArr, int commandArrSize) {
+execute_tt(command_t *commandArr, int commandArrSize, command_t last_command) {
 	int i,j;
 
 	
@@ -472,7 +473,6 @@ execute_tt(command_t *commandArr, int commandArrSize) {
 
       
       //execute in parallel
-
       nodei_t* count = execList;
       while(count)
       {
@@ -483,16 +483,26 @@ execute_tt(command_t *commandArr, int commandArrSize) {
         } 
         else 
         {
+          count->pid = childpid;
           count = count->next;
         }
       }
 
       //wait for parallel process to finish
-      while(execList)
+      count = execList;
+      while(count)
       {
-        waitpid(-1, &procStatus, 0);
-        makeRowZero(depGraph, commandArrSize, execList->data);
-        execList = execList->next;
+        //find the last command that returned
+        pid_t p = waitpid(-1, &procStatus, 0);
+        nodei_t* n = execList;
+        while(n->pid != p)
+        {
+          n=n->next;
+        }
+        last_command = commandArr[n->data];
+
+        makeRowZero(depGraph, commandArrSize, count->data);
+        count = count->next;
       }  
 
       // printf("\n");
@@ -519,7 +529,7 @@ execute_tt(command_t *commandArr, int commandArrSize) {
 
 void execute_general(command_t *commandArr, int commandArrSize, command_t last_command, int time_travel) {
 	if (time_travel) 
-		execute_tt(commandArr, commandArrSize);
+		execute_tt(commandArr, commandArrSize, last_command);
 	else {
 		int i=0;	
 
