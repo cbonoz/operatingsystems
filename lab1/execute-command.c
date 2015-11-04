@@ -342,7 +342,7 @@ isColZero(int** depGraph, int size, int i)
 }
 
 void
-execute_tt(command_t *commandArr, int commandArrSize, command_t last_command) {
+execute_tt(command_t *commandArr, int commandArrSize, command_t last_command, int limit_process, int limit) {
 	int i,j;
 
 	
@@ -433,7 +433,7 @@ execute_tt(command_t *commandArr, int commandArrSize, command_t last_command) {
       }  
     }
     //print dependency matrix for testing purposes
-    //print_graph(depGraph, commandArrSize);
+    print_graph(depGraph, commandArrSize);
     
     //fork and execute from here    
     int* execTracker = (int*)checked_malloc(sizeof(int)*commandArrSize);
@@ -472,55 +472,79 @@ execute_tt(command_t *commandArr, int commandArrSize, command_t last_command) {
       }
 
       
-      //execute in parallel
+     
+
+
+      
       nodei_t* count = execList;
-      while(count)
-      {
-        if (!(childpid = fork())) 
-        {  
-          execute_command(commandArr[count->data]);
-          exit(commandArr[count->data]->status);
-        } 
-        else 
+      //execute commands in parallel
+
+      //lab 1c design (limit number of processes in parallel to limit)
+      //if (limit_process) { //uncomment when limit_process implemented
+      if (false) { //placeholder
+        
+        /*
+        int p_count=0;
+        nodei_t* countwt = execList;
+        while(countex)
         {
-          //count->pid = childpid;
-          count = count->next;
+          for (;counter < limit || !countex; counter++)
+          {
+            if (!(childpid = fork())) 
+            {  
+              execute_command(commandArr[countex->data]);
+              exit(commandArr[countex->data]->status);
+            } 
+            else 
+            {
+              //count->pid = childpid;
+              countex = countex->next;
+            }
+          }
+       
+          //wait for parallel process to finish
+          counter =0;
+          for (;counter < limit || !countwt; counter++)
+          {
+         
+
+            waitpid(-1, &procStatus, 0);
+
+            //last_command could be any of the execution from the current round
+            last_command = commandArr[countwt->data];
+            makeRowZero(depGraph, commandArrSize, countwt->data);
+            countwt = countwt->next;
+          }  
         }
+        */
+
+      } else { //execute with max parallelism
+        
+        while(count)
+        {
+          if (!(childpid = fork())) 
+          {  
+            execute_command(commandArr[count->data]);
+            exit(commandArr[count->data]->status);
+          } 
+          else 
+          {
+            //count->pid = childpid;
+            count = count->next;
+          }
+        }
+
+        //wait for parallel process to finish
+        count = execList;
+        while(count) {
+          waitpid(-1, &procStatus, 0);
+          //last_command could be any of the execution from the current round
+          last_command = commandArr[count->data];
+          makeRowZero(depGraph, commandArrSize, count->data);
+          count = count->next;
+        }  
       }
 
-      //wait for parallel process to finish
-      count = execList;
-      while(count)
-      {
-        //find the last command that returned
-        // pid_t p = waitpid(-1, &procStatus, 0);
-        // nodei_t n = execList;
-        // while(n->pid != p)
-        // {
-        //   n=n->next;
-        // }
-        // last_command = commandArr[n->data];
-
-        waitpid(-1, &procStatus, 0);
-
-        //last_command could be any of the execution from the current round
-        last_command = commandArr[count->data];
-        makeRowZero(depGraph, commandArrSize, count->data);
-        count = count->next;
-      }  
-
-      // printf("\n");
-      // for (i = 0; i<commandArrSize; i++)
-      // {
-      //   for (j = 0; j<commandArrSize; j++)
-      //   {
-      //     printf("%d ", depGraph[i][j]);
-      //   }
-      //   printf("\n");
-      // }
-
-      //printf("\nparallelization %d completed \n", x++);
-      
       
     }
     
@@ -531,9 +555,12 @@ execute_tt(command_t *commandArr, int commandArrSize, command_t last_command) {
 }
 
 
-void execute_general(command_t *commandArr, int commandArrSize, command_t last_command, int time_travel) {
-	if (time_travel) 
-		execute_tt(commandArr, commandArrSize, last_command);
+void execute_general(command_t *commandArr, int commandArrSize, command_t last_command, int time_travel, int limit_process, int limit) {
+
+	if (time_travel) {
+    //limit process and limit will only be relevant in the case of time_travel
+		execute_tt(commandArr, commandArrSize, last_command, limit_process, limit);
+  }
 	else {
 		int i=0;	
 

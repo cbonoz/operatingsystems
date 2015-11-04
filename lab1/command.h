@@ -23,12 +23,12 @@ void print_command (command_t);
 
 /* Execute a command.  Use "time travel" if the integer flag is
    nonzero.  */
-void execute_general(command_t *commandArr, int commandArrSize, command_t last_command, int time_travel);
+void execute_general(command_t *commandArr, int commandArrSize, command_t last_command, int time_travel, int limit_process, int limit);
 
 //execute without time travel
 void execute_command (command_t);
 //execute time travel
-void execute_tt(command_t *arr, int size, command_t last_command);
+void execute_tt(command_t *arr, int size, command_t last_command, int limit_process, int limit);
 
 
 

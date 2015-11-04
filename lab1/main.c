@@ -26,7 +26,7 @@ static char const *script_name;
 static void
 usage (void)
 {
-  error (1, 0, "usage: %s [-pt] SCRIPT-FILE", program_name);
+  error (1, 0, "usage: %s [-pt] [-n N] SCRIPT-FILE", program_name);
 }
 
 static int
@@ -42,19 +42,36 @@ main (int argc, char **argv)
   int command_number = 1;
   int print_tree = 0;
   int time_travel = 0;
+  int limit_process=0;
+  int limit=-1;
+
   int make=1;
   program_name = argv[0];
-
-  for (;;)
-    switch (getopt (argc, argv, "pt"))
+  int c;
+  while ((c = getopt (argc, argv, "ptn:")) != -1) {
+    switch (c)
       {
       case 'p': print_tree = 1; break;
       //case 'm': print_tree = 1; make=0; break;
+      case 'n': 
+        limit_process=1; 
+        limit=atoi(optarg);
+        if (limit<=0) //process limit must be positive
+          usage();
+        break;
       case 't': time_travel = 1; break;
-      default: usage (); break;
-      case -1: goto options_exhausted;
+      default: printf("opt parsing error:\n"); usage (); break;
+      
       }
-  options_exhausted:;
+  }
+  //prints for debugging bash command argument parsing
+  
+  printf("p: %d n: %d t: %d\nlimit: %d\n", print_tree, limit_process, time_travel, limit);
+  /*
+  int index;
+  for (index = optind; index < argc; index++)
+    printf ("Non-option argument %s\n", argv[index]);
+  */
 
   // There must be exactly one file argument.
   if (optind != argc - 1)
@@ -104,7 +121,7 @@ main (int argc, char **argv)
   }
   else 
   {
-    execute_general(commandArr,commandArrSize, last_command, time_travel);
+    execute_general(commandArr,commandArrSize, last_command, time_travel, limit_process, limit);
   }
 
   free(command_stream);
