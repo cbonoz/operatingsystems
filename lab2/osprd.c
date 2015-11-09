@@ -194,17 +194,20 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 		eprink("Closing file\n");
 		osp_spin_lock(&d->mutex);
 		//check if file is locked
-		file_with_lock = filp->f_flags && F_OSPRD_LOCKED;
+		file_with_lock = filp->f_flags & F_OSPRD_LOCKED;
 
-		if (file_with_lock) {
-			
-
-			if (filp_writable && d->write) {
+		if (file_with_lock) 
+		{
+			//unlocking the lock bits in f_flags
+			filp->f_flags &= ~F_OSPRD_LOCKED;
+			if (filp_writable) 
+			{
 				d->writelockset--;
-			} else {
+			} 
+			else 
+			{
 				d->readlockset--;
 			}
-
 		}
 		print_osprd(d);
 		//release lock and increment current ticket being served;
@@ -287,8 +290,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		osp_spin_unlock(&d->mutex);
 
 		if (filp_writable) 
-		{
-			
+		{		
 			if (wait_event_interruptible(d->blockq, my_ticket==d->ticket_head && !d->writelockset && !d->readlockset))
 			{
 				r= -ERESTARTSYS;
@@ -329,12 +331,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 				//other stuff
 				r=0;
 			}
-
 		}
-					
-
-
-
 	} else if (cmd == OSPRDIOCTRYACQUIRE) {
 
 		// EXERCISE: ATTEMPT to lock the ramdisk.
@@ -355,17 +352,16 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		//is available right now (two cases for file write or read)
 		
 		
-		if (filp_writable) {
-
+		if (filp_writable) 
+		{
 			osp_spin_lock(&d->mutex);//start spin lock
-			if (d->writelockset==0 && d->readlockset==0 && d->ticket_head==d->ticket_tail) {
-				
+			if (d->writelockset==0 && d->readlockset==0 && d->ticket_head==d->ticket_tail) 
+			{	
 				filp->f_flags |= F_OSPRD_LOCKED;
 				d->writelockset++;
 				print_osprd(d);
 				osp_spin_unlock(&d->mutex);
 				r=0;
-
 			} 
 			else 
 			{
@@ -376,8 +372,8 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		} 
 		else {
 			osp_spin_lock(&d->mutex);//start spin lock
-			if (d->writelockset==0 && d->ticket_head==d->ticket_tail) {
-				
+			if (d->writelockset==0 && d->ticket_head==d->ticket_tail) 
+			{	
 				filp->f_flags |= F_OSPRD_LOCKED;
 				d->readlockset++;
 				print_osprd(d);
@@ -407,25 +403,27 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		eprintk("Unlocking the ramdisk...\n");
 	
 		//check if lock is already unlocked
-		if (filp->f_flags==0) {
+		if (filp->f_flags==0) 
+		{
 			r= -EINVAL;
-		} else {
-
+		} 
+		else 
+		{
 			//clear the lock
-			
 			osp_spin_lock(&d->mutex);//start spin lock
-			filp->f_flags=0;
-			if (filp_writable) {
-
+			//unlock the lock bits in f_flags
+			filp->f_flags &= ~F_OSPRD_LOCKED;
+			if (filp_writable) 
+			{
 				d->writelockset--;
-			} else {
+			} 
+			else
+			{
 				d->readlockset--;
 			}
 			osp_spin_unlock(&d->mutex);
 			wake_up_all(&d->blockq);
 			print_osprd(d);
-
-
 
 			//normal exit status
 			r=0;
