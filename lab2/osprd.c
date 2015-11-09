@@ -366,20 +366,30 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 				osp_spin_unlock(&d->mutex);
 				r=0;
 
-			} else 
+			} 
+			else 
+			{
+				osp_spin_unlock(&d->mutex);
 				r=-EBUSY;
+			}
 
 		} 
 		else {
+			osp_spin_lock(&d->mutex);//start spin lock
 			if (d->writelockset==0 && d->ticket_head==d->ticket_tail) {
-				osp_spin_lock(&d->mutex);//start spin lock
+				
 				filp->f_flags |= F_OSPRD_LOCKED;
 				d->readlockset++;
 				print_osprd(d);
 				osp_spin_unlock(&d->mutex);
 				r=0;
-			} else 
-				r=-EBUSY;
+			} 
+			else 
+			{
+				osp_spin_unlock(&d->mutex);
+				r=-EBUSY; 
+			}
+				
 
 		}
 		
