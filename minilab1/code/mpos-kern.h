@@ -13,17 +13,23 @@ typedef enum procstate {
 					// has called sys_wait() yet
 } procstate_t;
 
+typedef struct process process_t;
 // Process descriptor type
-typedef struct process {
+struct process {
 	pid_t p_pid;			// Process ID
 
 	registers_t p_registers;	// Current process state: registers,
 					// stack location, EIP, etc.
 					// 'registers_t' defined in x86.h
 	procstate_t p_state;		// Process state; see above
-	int p_exit_status;		// Process's exit status (if it has
-					// exited and p_state == P_ZOMBIE)
-} process_t;
+	int p_exit_status;		// Process's exit status (if it has exited and p_state == P_ZOMBIE)
+	process_t *p_wait;
+	//process_t *p_wait1;
+	//process_t *p_wait2;
+	//process_t *p_wait3;
+};
+
+
 
 
 // Top of the kernel stack

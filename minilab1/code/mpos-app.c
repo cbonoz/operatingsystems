@@ -11,6 +11,7 @@
 
 void run_child(void);
 
+
 void
 start(void)
 {
@@ -18,7 +19,6 @@ start(void)
 				     gave the child process a new stack. */
 	pid_t p;
 	int status;
-
 	app_printf("About to start a new process...\n");
 
 	p = sys_fork();
@@ -27,8 +27,10 @@ start(void)
 	else if (p > 0) {
 		app_printf("Main process %d!\n", sys_getpid());
 		do {
+			app_printf("W");
 			status = sys_wait(p);
 		} while (status == WAIT_TRYAGAIN);
+		
 		app_printf("Child %d exited with status %d!\n", p, status);
 
 		// Check whether the child process corrupted our stack.

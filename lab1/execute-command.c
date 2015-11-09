@@ -487,6 +487,7 @@ execute_tt(command_t *commandArr, int commandArrSize, command_t last_command, in
       {
         printf("---\nparallelization %d started \n", x);
         for (counter = 0;counter < N && countex; counter++)
+
         {
           if (!(childpid = fork())) 
           {  

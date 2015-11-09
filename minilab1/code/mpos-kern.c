@@ -1,6 +1,7 @@
 #include "mpos-kern.h"
 #include "x86.h"
 #include "lib.h"
+//#include "mpos-app.h"
 
 /*****************************************************************************
  * mpos-kern
@@ -125,6 +126,15 @@ start(void)
  *****************************************************************************/
 
 static pid_t do_fork(process_t *parent);
+static pid_t do_newthread(process_t *parent, unsigned int start_function);
+static pid_t do_kill(pid_t pid);
+
+
+//checks if other thread target is invalid
+static inline int
+invalidTarget(int p) {
+	return (p <= 0 || p >= NPROCS || p == current->p_pid || proc_array[p].p_state == P_EMPTY);
+}
 
 void
 interrupt(registers_t *reg)
@@ -139,6 +149,7 @@ interrupt(registers_t *reg)
 
 	switch (reg->reg_intno) {
 
+		
 	case INT_SYS_GETPID:
 		// The 'sys_getpid' system call returns the current
 		// process's process ID.  System calls return results to user
@@ -168,9 +179,21 @@ interrupt(registers_t *reg)
 		// before calling the system call.  The %eax REGISTER has
 		// changed by now, but we can read the APPLICATION's setting
 		// for this register out of 'current->p_registers'.
-		current->p_state = P_ZOMBIE;
-		current->p_exit_status = current->p_registers.reg_eax;
+
+		//set current process to zombie, if another process waiting - 
+		//schedule that process and set the current to empty
+		current->p_state = P_ZOMBIE;// changed from P_EMPTY, want to be able to retain status
+		current->p_exit_status = current->p_registers.reg_eax;//get status
+		if (current->p_wait != NULL) {//schedule the waiting process
+			current->p_wait->p_state=P_RUNNABLE;
+			current->p_wait->p_registers.reg_eax=current->p_exit_status;
+			current->p_state=P_EMPTY;
+		}
+
+
+		
 		schedule();
+
 
 	case INT_SYS_WAIT: {
 		// 'sys_wait' is called to retrieve a process's exit status.
@@ -183,21 +206,44 @@ interrupt(registers_t *reg)
 		// process to call sys_wait(P).)
 
 		pid_t p = current->p_registers.reg_eax;
-		if (p <= 0 || p >= NPROCS || p == current->p_pid
-		    || proc_array[p].p_state == P_EMPTY)
+		process_t *running=&proc_array[p];//other process
+		if (invalidTarget(p)) {
 			current->p_registers.reg_eax = -1;
-		else if (proc_array[p].p_state == P_ZOMBIE)
+		}
+		else if (proc_array[p].p_state == P_ZOMBIE) {
 			current->p_registers.reg_eax = proc_array[p].p_exit_status;
-		else
-			current->p_registers.reg_eax = WAIT_TRYAGAIN;
+			proc_array[p].p_state = P_EMPTY;
+		}
+		else {//if running
+			//current->p_registers.reg_eax = WAIT_TRYAGAIN;
+			running->p_wait=current;
+			current->p_state=P_BLOCKED;//don't poll - set blocked and say this process is waiting
+		}
+
 		schedule();
+	}
+	
+	case INT_SYS_NEWTHREAD: {
+		//reg eax will hold pointer to thread start function
+		current->p_registers.reg_eax=do_newthread(current,(unsigned int)current->p_registers.reg_eax);
+		run(current); 
+	}
+	case INT_SYS_KILL: {
+		//should 
+		pid_t p=current->p_registers.reg_eax;//argument of asm function call (pid to kill)
+
+		if (invalidTarget(p)) //check if pid is valid target
+			current->p_registers.reg_eax = -1;//bad target pid p, exit
+		else
+			current->p_registers.reg_eax=do_kill(p);
+		run(current);//resume current
 	}
 
 	default:
 		while (1)
-			/* do nothing */;
-
+			;//do nothing
 	}
+
 }
 
 
@@ -217,37 +263,19 @@ interrupt(registers_t *reg)
  *
  *****************************************************************************/
 
-static void copy_stack(process_t *dest, process_t *src);
+//static void copy_stack(process_t *dest, process_t *src);
 
-static pid_t
-do_fork(process_t *parent)
-{
-	// YOUR CODE HERE!
-	// First, find an empty process descriptor.  If there is no empty
-	//   process descriptor, return -1.  Remember not to use proc_array[0].
-	// Then, initialize that process descriptor as a running process
-	//   by copying the parent process's registers and stack into the
-	//   child.  Copying the registers is simple: they are stored in the
-	//   process descriptor in the 'p_registers' field.  Copying the stack
-	//   is a little more involved; see the copy_stack function, below.
-	//   The child process's registers will be equal to the parent's, with
-	//   two differences:
-	//   * reg_esp    The child process's stack pointer will point into
-	//                its stack, rather than the parent's.  copy_stack
-	//                should arrange this.
-	//   * ???????    There is one other difference.  What is it?  (Hint:
-	//                What should sys_fork() return to the child process?)
-	// You need to set one other process descriptor field as well.
-	// Finally, return the child's process ID to the parent.
 
-	return -1;
-}
-
+/*
+#define PROC1_STACK_ADDR	0x280000
+#define PROC_STACK_SIZE		0x040000
+*/
 static void
 copy_stack(process_t *dest, process_t *src)
 {
 	uint32_t src_stack_bottom, src_stack_top;
 	uint32_t dest_stack_bottom, dest_stack_top;
+
 
 	// YOUR CODE HERE!
 	// This function copies the 'src' process's stack into the 'dest'
@@ -296,16 +324,118 @@ copy_stack(process_t *dest, process_t *src)
 	// and then how to actually copy the stack.  (Hint: use memcpy.)
 	// We have done one for you.
 
-	// YOUR CODE HERE!
 
-	src_stack_top = 0 /* YOUR CODE HERE */;
+	pid_t s_pid= src->p_pid;
+	pid_t d_pid= dest->p_pid;
+
+	//each process has fixed stack size, calculate bounds by using offsets
+	src_stack_top = PROC1_STACK_ADDR+PROC_STACK_SIZE*s_pid;
 	src_stack_bottom = src->p_registers.reg_esp;
-	dest_stack_top = 0 /* YOUR CODE HERE */;
-	dest_stack_bottom = 0 /* YOUR CODE HERE: calculate based on the
-				 other variables */;
-	// YOUR CODE HERE: memcpy the stack and set dest->p_registers.reg_esp
+	unsigned int copy_size=src_stack_top-src_stack_bottom;
+	dest_stack_top = PROC1_STACK_ADDR+PROC_STACK_SIZE*d_pid;
+	dest_stack_bottom = dest_stack_top-copy_size;//src_stack_bottom+(d_pid-s_pid)*PROC_STACK_SIZE; 
+	dest->p_registers.reg_esp=dest_stack_bottom;
+	//memcpy(dest, src, size)
+	
+	//copy stack - stack grows downward for each process
+	memcpy((void  *)dest_stack_top,(void *)src_stack_top,copy_size);
+	
+	
+
 }
 
+static pid_t
+do_fork(process_t *parent)
+{
+	
+	// First, find an empty process descriptor.  If there is no empty
+	//   process descriptor, return -1.  Remember not to use proc_array[0].
+	// Then, initialize that process descriptor as a running process
+	//   by copying the parent process's registers and stack into the
+	//   child.  Copying the registers is simple: they are stored in the
+	//   process descriptor in the 'p_registers' field.  Copying the stack
+	//   is a little more involved; see the copy_stack function, below.
+	//   The child process's registers will be equal to the parent's, with
+	//   two differences:
+	//   * reg_esp    The child process's stack pointer will point into
+	//                its stack, rather than the parent's.  copy_stack
+	//                should arrange this.
+	//   * ???????    There is one other difference.  What is it?  (Hint:
+	//                What should sys_fork() return to the child process?)
+	// You need to set one other process descriptor field as well.
+	// Finally, return the child's process ID to the parent.
+
+	/*look at proc_array and append to end (NPROCS is max number of current processes)*/
+	int i=1;
+	//look for empty process slot
+	while (i<NPROCS && proc_array[i].p_state!=P_EMPTY)
+		i++; 
+
+	if (i>=NPROCS) return -1; //failed for find empty process slot
+	process_t *child=&proc_array[i];
+	//now copy info from parent into newly created process
+	child->p_pid=i;
+	child->p_state=P_RUNNABLE;
+	child->p_registers=parent->p_registers;
+	
+	child->p_registers.reg_eax=0; 
+	copy_stack(child, parent);
+	return child->p_pid;
+}
+/*
+sys_newthread = do_newthread (kernel level function)
+Works similarly to do_fork, except rather than starting at the same instruction as the parent,
+the new thread starts by executing the start_function function,
+so the function's address becomes the new thread's instruction pointer
+@param parent parent process requesting new thread
+@param start_function - unsigned int specifying address of function
+@return pid pid of the new thread created, else -1
+*/
+static pid_t
+do_newthread(process_t *parent,unsigned int start_function) {
+	int i=1;
+	//look for empty process slot
+	while (proc_array[i].p_state!=P_EMPTY && i<NPROCS)
+		i++; 
+	if (i>=NPROCS) return -1; //failed for find empty process slot
+	process_t *child=&proc_array[i];
+	//now copy info from parent into newly created process
+	child->p_pid=i;
+	child->p_state=P_RUNNABLE;
+	child->p_registers=parent->p_registers;
+	
+	child->p_registers.reg_eax=0; 
+	
+	//do not copy stack
+	child->p_registers.reg_esp=(unsigned int)&start_function;
+	return child->p_pid;
+}
+
+/*
+do_kill - kills current process with pid, assumes not empty
+@param pid pid of the desired process to kill
+@return pid pid of killed process, else -1 if failure
+*/
+static pid_t
+do_kill(pid_t pid) {
+	process_t *proc=&proc_array[pid];
+	if (proc->p_state != P_ZOMBIE) //if not zombie, change to zombie, if already zombie set return to 0
+	{
+		proc->p_state = P_ZOMBIE;
+		proc->p_exit_status = -1;//terminated
+		
+		if (proc->p_wait != NULL) //if there is another process waiting, make it runnable
+		{
+			proc->p_wait->p_state = P_RUNNABLE;
+			proc->p_wait->p_registers.reg_eax = proc->p_exit_status;
+			proc->p_state = P_EMPTY;	
+		}
+	}
+	current->p_registers.reg_eax = 0;
+	
+
+	return 0;//success
+}
 
 
 /*****************************************************************************

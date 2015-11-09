@@ -5,11 +5,73 @@ UCLA ID: 904587506
 -------------------------------------------------------------------------------
 
 Response to Exercise 1:
-
-
+ When the sys_getpid() interrupt is called, the caller pid gets stored into the eax register, which is not modified throughout the interrupt process (even when the RUNNABLE processes are scheduled). Thus, the caller will still receive the correct (expected) value for the sys_getpid() call when it returns.
 
 Anything else you'd like us to know:
 
-
+Modified app.c files to include tests for extra credit implementations. Last few numbers of count may show at top of emulator. Can control with the value run_ec in mpos-app2.c. Current version kills off odd process numbers. 
 
 Extra credit exercises:
+---
+completed, see below.
+
+
+Ex 5:
+
+This code demonstrates
+void start() {
+	int x = 0;  /* note that local variable x lives on the stack */
+			
+			app_printf("Ex5 program:\n");
+			volatile int* y;
+			int* volatile z;
+			//point both to x in parent thread
+			y=&x; 
+	        z=&x;
+	        pid_t p = sys_fork();
+	        if (p == 0) {
+	        	/*Reassign pointers - In correct system isolation, changing the value of x here should not change the value of it in the other process. Here the parent is able to the value of both x instances*/
+	        	y=&x;
+	        	z=&x;
+
+	        	*y=1;
+	        	*z=1;
+	        	
+	        	//run_child();
+			} else if (p > 0) {
+			    sys_wait(p); // assume blocking implementation
+			}
+			//prints 11 in minilab OS - should print 10 for correct
+			app_printf("%d", x);
+}
+
+Explanation of Ex5:
+In correct system process isolation, changing the value of local x (stack variable) in one process would not change the value of the other process. In a system with correct process isolation, the code would print "10". In MiniprocOS, the code prints the value of x changed by process 0 twice -> "11".
+
+A pointer of the form:
+1. volatile int* p;
+is a pointer to a volatile int. The compiler will assume that it is possible for the variable that p is pointing at to have changed even if there is nothing in the source code to suggest that this might occur. 
+2. int* volatile ptr;
+The pointer itself is volatile, which means that the compiler shouldn't try to cache the pointer in memory or try to optimize the pointer value because the pointer itself might get reassigned by something else.
+
+
+
+
+Ex 6: steps and changes (see code)
+1. added system call number for newthread in mpos.h
+2. added asm call for sys_newthread in mpos.app.h
+3. added INT case for newthread and definition for do_newthread in mpos-kern.c
+4. Added test in mpos-app2.c
+
+Ex 7: steps and changes (see code)
+1. added system call number for kill in mpos.h
+2. added asm call for sys_kill in mpos-app.h
+3. added INT case for kill and definition for do_kill in mpos-kern.c
+4. Modified run_child to kill odd numbered process (iterate across odd NPROCS) whenever an even-numbered process is called in mpos-app.c
+
+
+
+
+
+
+

@@ -162,7 +162,33 @@ sys_wait(pid_t pid)
 	return retval;
 }
 
+/*****************************************************************************
+ EXTRA CALLS
+ *****************************************************************************/
+static inline int
+sys_kill(pid_t pid) {
+	int retval = -1;
+	asm volatile("int %1\n"
+		     : "=a" (retval)
+		     : "i" (INT_SYS_KILL),
+		       "a" (pid)
+		     : "cc", "memory");
 
+	return retval;
+}
+
+static inline int
+sys_newthread(void (*start_function)(void))
+{
+	int retval=-1;
+	asm volatile("int %1\n"
+			: "=a" (retval)
+			: "i" (INT_SYS_NEWTHREAD),
+			  "a" (start_function)
+			: "cc", "memory");
+			
+	return retval;
+}
 
 /*****************************************************************************
  * app_printf(format, ...)
@@ -193,5 +219,7 @@ app_printf(const char *format, ...)
 	cursorpos = console_vprintf(cursorpos, color, format, val);
 	va_end(val);
 }
+
+
 
 #endif
