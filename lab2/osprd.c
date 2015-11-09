@@ -152,14 +152,17 @@ static void osprd_process_request(osprd_info_t *d, struct request *req)
 
 	if (rq_data_dir(req)==READ) {
 		memcpy(req->buffer, d->data + (req->sector*SECTOR_SIZE), req->current_nr_sectors*SECTOR_SIZE);
+		eprintk("Process Request: Finished Read\n");
+
 	}
 	else {
 		memcpy(d->data + (req->sector*SECTOR_SIZE), req->buffer,  req->current_nr_sectors*SECTOR_SIZE);
+		eprintk("Process Request: Finished Write\n");
 	}
 
 	// Your code here.
 	osp_spin_unlock(&d->mutex);
-	eprintk("Should process request...\n");
+	//eprintk("Should process request...\n");
 
 	end_request(req, 1);
 }
@@ -181,7 +184,7 @@ static int osprd_open(struct inode *inode, struct file *filp)
 static int osprd_close_last(struct inode *inode, struct file *filp)
 {
 	if (filp) {
-		unsigned int file_with_lock;
+		unsigned int file_locked;
 		osprd_info_t *d = file2osprd(filp);
 		int filp_writable = filp->f_mode & FMODE_WRITE;
 
@@ -194,6 +197,7 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 		eprink("Closing file\n");
 		osp_spin_lock(&d->mutex);
 		//check if file is locked
+		
 		file_with_lock = filp->f_flags & F_OSPRD_LOCKED;
 
 		if (file_with_lock) 
@@ -208,11 +212,12 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 			{
 				d->readlockset--;
 			}
+			wake_up_all(d->blockq);//wake up all if file was locked
 		}
 		print_osprd(d);
 		//release lock and increment current ticket being served;
 		osp_spin_unlock(&d->mutex);
-		wake_up_all(d->blockq)
+		
 
 		// This line avoids compiler warnings; you may remove it.
 		(void) filp_writable, (void) d;
@@ -292,6 +297,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		if (filp_writable) 
 		{		
 			if (wait_event_interruptible(d->blockq, my_ticket==d->ticket_head && !d->writelockset && !d->readlockset))
+			//if (wait_event_interruptible(d->blockq, my_ticket==d->ticket_head && !d->writelockset && (!d->readlockset || !filp_writable)))
 			{
 				r= -ERESTARTSYS;
 			} 
@@ -301,10 +307,11 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 				osp_spin_lock(&d->mutex);
 				d->writelockset++;
 				d->ticket_head++;
+				filp->f_flags |= F_OSPRD_LOCKED;
 				osp_spin_unlock(&d->mutex);
 
 				print_osprd(d);
-				filp->f_flags |= F_OSPRD_LOCKED;
+				
 				
 				r=0;
 			}
@@ -322,10 +329,11 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 				osp_spin_lock(&d->mutex);
 				d->readlockset++;
 				d->ticket_head++;
+				filp->f_flags |= F_OSPRD_LOCKED;//not sure if lock needed for read
 				osp_spin_unlock(&d->mutex);
 
 				print_osprd(d);
-				filp->f_flags |= F_OSPRD_LOCKED;//not sure if lock needed for read
+				
 				
 				
 				//other stuff
@@ -403,7 +411,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		eprintk("Unlocking the ramdisk...\n");
 	
 		//check if lock is already unlocked
-		if (filp->f_flags==0) 
+		if (filp->f_flags & F_OSPRD_LOCKED != 0) 
 		{
 			r= -EINVAL;
 		} 
@@ -421,9 +429,10 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 			{
 				d->readlockset--;
 			}
-			osp_spin_unlock(&d->mutex);
+			
 			wake_up_all(&d->blockq);
 			print_osprd(d);
+			osp_spin_unlock(&d->mutex);
 
 			//normal exit status
 			r=0;
