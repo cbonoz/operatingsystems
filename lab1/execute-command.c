@@ -445,11 +445,14 @@ execute_tt(command_t *commandArr, int commandArrSize, command_t last_command, in
     nodei_t* execList;
 
     int x = 1;
-    
+
+    //update the limit of maximum concurrent processes to be ran
+    int N = limit_process?limit:commandArrSize;  
+
     while(countT < commandArrSize)
     {
       
-      //printf("---\nparallelization %d started \n", x);
+      
       execList = (nodei_t*)checked_malloc(sizeof(nodei_t));
       execList = NULL;
 
@@ -470,82 +473,44 @@ execute_tt(command_t *commandArr, int commandArrSize, command_t last_command, in
           //printf("%d ", execList->data);
         }
       }
-
-      
-     
-
-
       
       nodei_t* count = execList;
       //execute commands in parallel
 
       //lab 1c design (limit number of processes in parallel to limit)
-      //if (limit_process) { //uncomment when limit_process implemented
-      if (false) { //placeholder
-        
-        /*
-        int p_count=0;
-        nodei_t* countwt = execList;
-        while(countex)
-        {
-          for (;counter < limit || !countex; counter++)
-          {
-            if (!(childpid = fork())) 
-            {  
-              execute_command(commandArr[countex->data]);
-              exit(commandArr[countex->data]->status);
-            } 
-            else 
-            {
-              //count->pid = childpid;
-              countex = countex->next;
-            }
-          }
-       
-          //wait for parallel process to finish
-          counter =0;
-          for (;counter < limit || !countwt; counter++)
-          {
-         
+      
+      int counter;
+      nodei_t* countwt = execList;
+      nodei_t* countex = execList;
 
-            waitpid(-1, &procStatus, 0);
-
-            //last_command could be any of the execution from the current round
-            last_command = commandArr[countwt->data];
-            makeRowZero(depGraph, commandArrSize, countwt->data);
-            countwt = countwt->next;
-          }  
-        }
-        */
-
-      } else { //execute with max parallelism
-        
-        while(count)
+      while(countex)
+      {
+        printf("---\nparallelization %d started \n", x);
+        for (counter = 0;counter < N && countex; counter++)
         {
           if (!(childpid = fork())) 
           {  
-            execute_command(commandArr[count->data]);
-            exit(commandArr[count->data]->status);
+            execute_command(commandArr[countex->data]);
+            exit(commandArr[countex->data]->status);
           } 
           else 
           {
             //count->pid = childpid;
-            count = count->next;
+            countex = countex->next;
           }
         }
-
+     
         //wait for parallel process to finish
-        count = execList;
-        while(count) {
+        for (counter =0;counter < N && countwt; counter++)
+        {
           waitpid(-1, &procStatus, 0);
           //last_command could be any of the execution from the current round
-          last_command = commandArr[count->data];
-          makeRowZero(depGraph, commandArrSize, count->data);
-          count = count->next;
+          last_command = commandArr[countwt->data];
+          makeRowZero(depGraph, commandArrSize, countwt->data);
+          countwt = countwt->next;
         }  
+        printf("parallelization %d ended \n", x++);
       }
-
-      
     }
     
     free(depGraph);
