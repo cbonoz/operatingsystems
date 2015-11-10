@@ -1,0 +1,49 @@
+
+\documentclass{article}
+\begin{document}
+Chris Buonocore
+904587506
+\begin{center}
+\section*{CS 143 HW1}
+\end{center}
+1.(R − S) ∪ (S − R)
+
+\begin{tabular}{ |A|B|C| } 
+ \hline
+ 4 & 5 & 6 \\ 
+ 1 & 2 & 6 \\ 
+ 2 & 5 & 4 \\ 
+ \hline
+\end{tabular}
+
+2. R▹◃_{R.A<S.C∧R.B<S.D}S
+
+\begin{tabular}{ |R.A|R.B|S.B|S.C|S.D| } 
+ \hline
+ 1 & 2 & 2 & 4 & 6 \\ 
+ 1 & 2 & 8 & 6 & 8 \\ 
+ 1 & 2 & 7 & 5 & 9 \\ 
+ 3 & 4 & 2 & 4 & 6 \\ 
+ 3 & 4 & 8 & 6 & 8 \\ 
+ 3 & 4 & 7 & 5 & 9 \\ 
+ \hline
+\end{tabular}
+
+3.
+a)\Pi_{customer-name}(\sigma_{branch-name='Region12'}(Customer \Join Account))
+
+b)\Pi_{customer-name}(\sigma_{Branch.city<>Account.city}(Customer \Join Account \Join Branch))
+
+c)\Pi_{branch-name}(Branch)-\Pi_{branch-name}(Branch \Join Account)
+
+d)\Pi_{customer-name}(Customer)-\Pi_{customer-name}(\sigma_{branch-name='Region12'}(Customer \Join Account))
+
+e)
+
+f)
+
+4.
+\Pi_{sid}(Student)-\Pi_{sid}(\sigma_{S1.GPA>S2.GPA}(\rho_{S1}(Student) X \rho_{S2}(Student)))
+
+
+\end{document}

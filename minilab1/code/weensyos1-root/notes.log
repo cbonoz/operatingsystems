@@ -1,0 +1,163 @@
+questions:
+1. explain reg_eax - what does it hold.
+2. Explain the assembly language within each kernel call (how is the function interrupt being called - I do not see it explicitly shown anywhere)
+3. What is the best way to debug this - no longer have access to gdb since in emulator
+4. FOr the memcpy - do we use the top or bottom of the dest and src stacks, the parameter n for size goes toward increasing memory correct?
+5. mpos-app.c : should the sys_exit(0) be a sys_exit(1000) according to the lab spec - currently do not know where 1000 would be generated from.
+6. How/when is current assigned upon entrance to the interrupt handler switch (I see the global current pointer at the top - how is it controlled?)
+7. How to test the extra credit portion?
+8. Why change to zombie when INT_SYS_EXIT is called, why not just empty the location? Is it for the case of context switches (where the process might want to be resumed)?
+
+
+system calls
+
+fork()
+-	Child process gets called where fork() is called. (If not successful, then returns false or negative value)
+
+yield()
+-	The process tells the kernel that it does not want to run anymore. The scheduler is called and selects the next process to run.
+pid()
+-	gives the pid (process id) of the current process
+wait(int pid)
+-	if process has exited, will return exit_status, otherwise will return -2; //WAIT_TRYAGAIN;
+
+--
+
+In this minilab, we will put the first argument into the eax register. Put the second argument into ebx, third into ecx, etc. - then call a system trap function.
+
+Create a software trap.
+When the trap is called passed with the parameter:
+
+int system_call_number - describes which trap vector to run
+
+IDT (Interupt Descriptor Table) stored in memory. Entry entry in the table is the start of a different kernel routine. eip (instruction pointer) will become the address of the routine and the system will continue executing.
+
+return value gets stored into eax
+
+mpos-app.h
+
+
+mpos-kern.h
+
+process_descriptor - describes the process state
+
+typedef struct process {
+	pid_t p_pid;
+	registers_t p_registers;
+	procstate_t p_state;
+	int p_exit_status;
+	//add this
+	int waiting_processes[];//will be a queue of processes (if present) 
+
+	//other pids waiting on this process
+}
+
+The state of the process is the memory and registers.
+
+registers_t contains u32 reg_edi, u32 reg_esi, ..etc
+
+pid_t stored the register value
+
+Procstate_t stores the process state these are enums:
+	empty: process not associated with any process currently
+	runnable: running the process is possible
+	blocked: the current process is blocked from running
+	zombie: a process that has completed running but still has an entry in the process table.
+}
+
+process_t {
+	current
+	process_t
+	proc_array[NPROC]
+
+
+}
+
+mpos-kern.c
+
+Hardware: 0 - Ox10000
+Kernel code / data stack: 0x10000-0x20000
+Application code + globals: 0x20000-0x30000
+stack for proc 1
+stack for proc 2
+...
+
+processes share the same heap, but have different sections of stack
+current is a pointer to the current executing process
+mpos-app.h:
+
+1.
+
+2. Interrupt(interrupt_number)
+	switch(interrupt_number)
+		case INT_SYS_FORK:
+			current->p_registers.
+			reg_eax=do_fork(current);
+			run(current);
+
+We need to implement the do_fork() function:
+	fork function asks us to copy a child process that is the same as the parent process.
+
+int getEsp(int pid) {
+	return STACK_START+STACK_SIZE*pid;
+}
+
+int do_fork(proc *current) {
+	/*look at proc_array and append to end (NPROC is number of current processes)*/
+	int i=0;
+	while (proc_array[i]!=empty)
+		i++; 
+	//now copy info from current into newly created process
+	proc_array[i].p_pid=end.pid;
+	proc_array[i].p_registers=current->p_registers;
+	proc_array[i].p_registers.eax=0;
+	/*top of stack section for this process*/
+	proc_array[i].p_registers.esp=getEsp(proc_array[i].p_pid);
+	proc_array[i].p_state=current->p_state;
+
+	copy_stack(current, proc_array[i]);
+	return pid;
+}
+
+
+/* ------ */
+
+//this is what the user level code looks like
+do {
+	...
+	status=wait(pid)
+} while (status==WAIT_TRYAGAIN)
+
+//we want to improve the sys wait function
+sys.wait() {
+	...
+	if (process is exit) return exit_status
+	else
+	put current process to block status - change it to runnable status when p exits
+
+}
+
+do_syswait(proc *proc) {
+	current->state=blocked;
+	//when a process is done it will call sys.exit
+
+}
+
+//we also need to modify the do_sysexit function
+
+do_sysexit(proc *current) {
+	proc->state=runnable;
+	//change waited_processes are runnable
+}
+
+//when a process is running state is runnable, once it terminates, it is set to zombie. When a process finishes 
+
+---
+
+void do_getpid() {
+	current->p_registers.eax=current->p_pid;
+	run(current);
+	//change the run function to schedule to select the next process to run
+}
+
+

@@ -194,13 +194,13 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 
 		// Your code here.
 		//implement critical
-		eprink("Closing file\n");
+		eprintk("Closing file\n");
 		osp_spin_lock(&d->mutex);
 		//check if file is locked
 		
-		file_with_lock = filp->f_flags & F_OSPRD_LOCKED;
+		file_locked = filp->f_flags & F_OSPRD_LOCKED;
 
-		if (file_with_lock) 
+		if (file_locked) 
 		{
 			//unlocking the lock bits in f_flags
 			filp->f_flags &= ~F_OSPRD_LOCKED;
@@ -212,7 +212,7 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 			{
 				d->readlockset--;
 			}
-			wake_up_all(d->blockq);//wake up all if file was locked
+			wake_up_all(&d->blockq);//wake up all if file was locked
 		}
 		print_osprd(d);
 		//release lock and increment current ticket being served;
