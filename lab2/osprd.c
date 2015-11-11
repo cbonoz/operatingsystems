@@ -186,6 +186,20 @@ static void print_osprd(osprd_info_t *d) {
 			eprintk("%d ", iter->val);
 			iter = iter->next;
 		}
+
+		eprintk("\ndeadList: ");
+
+		iter = d->deadList;
+		if(iter == NULL)
+		{
+			eprintk("NULL");
+		}
+		while(iter)
+		{
+			eprintk("%d ", iter->val);
+			iter = iter->next;
+		}
+
 		eprintk("\n");
 	}
 
@@ -296,15 +310,15 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 {
 	if (filp) {
 		osprd_info_t *d = file2osprd(filp);
-		int filp_writable = filp->f_mode & FMODE_WRITE;
-		int file_locked = filp->f_flags & F_OSPRD_LOCKED;
+		int filp_writable = (filp->f_mode & FMODE_WRITE) != 0;
+		int file_locked = (filp->f_flags & F_OSPRD_LOCKED) != 0;
 
 		// EXERCISE: If the user closes a ramdisk file that holds
 		// a lock, release the lock.  Also wake up blocked processes
 		// as appropriate.
 
 		// Your code here.
-		if (debug) eprintk("\nClosing file\n");
+		if (debug) eprintk("\n[%d]Closing file\n", current->pid);
 		osp_spin_lock(&d->mutex);
 
 		if (file_locked) 
@@ -350,13 +364,13 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 	int r = 0;			// return value: initially 0
 
 
-	assert(d->writeList == NULL || d->writeList->next==NULL,d);
+	//assert(d->writeList == NULL || d->writeList->next==NULL,d);
 	//assert(d->readlockset>=0,d);
 	//assert(current!=NULL,d);
 
-	//int cur = current->pid;
-	int filp_writable = filp->f_mode & FMODE_WRITE;
-	int file_locked = filp->f_flags & F_OSPRD_LOCKED;
+	int cur = current->pid;
+	int filp_writable = (filp->f_mode & FMODE_WRITE) != 0;
+	int file_locked = (filp->f_flags & F_OSPRD_LOCKED) != 0;
 
 	// This line avoids compiler warnings; you may remove it.
 	(void) filp_writable, (void) d;
@@ -420,18 +434,19 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// }
 
 		//deadlock detection
-		// if(removeNode(&d->readList, current->pid)==0||removeNode(&d->writeList, current->pid)==0)
-		// {
-		// 	return -EDEADLK;
-		// }
+		if(removeNode(&d->readList, current->pid)==0||removeNode(&d->writeList, current->pid)==0)
+		{
+			return -EDEADLK;
+		}
 		
-		eprintk("Attempting to acquire\n");
+		
 		osp_spin_lock(&d->mutex);
 		int my_ticket = d->ticket_tail++;
 		osp_spin_unlock(&d->mutex);
 
 		if (filp_writable) 
 		{		
+			eprintk("[%d]Attempting to acquire - write\n", cur);
 			if (wait_event_interruptible(d->blockq, my_ticket==d->ticket_head && !d->writeList && !d->readList))
 			//if (wait_event_interruptible(d->blockq, my_ticket==d->ticket_head && !d->writelockset && (!d->readlockset || !filp_writable)))
 			{
@@ -445,15 +460,29 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 
 				//insert current bubble into headList 
 				osp_spin_lock(&d->mutex);
+				eprintk("[%d]ticket:%d being killed\n", cur, my_ticket);
 				r= -ERESTARTSYS;
-				insertNode(&d->deadList, my_ticket);
+				if(my_ticket != d->ticket_head)
+				{
+					insertNode(&d->deadList, my_ticket);
+				}
+				else
+				{
+					d->ticket_head++;
+					while(removeNode(&d->deadList, d->ticket_head) == 0)
+					{
+						d->ticket_head++;
+					}
+				}
+				if (debug) print_osprd(d);
 				osp_spin_unlock(&d->mutex);
 
 			} 
 			else 
 			{
-				eprintk("ticket:%d Acquired write lock\n", my_ticket);
+				
 				osp_spin_lock(&d->mutex);
+				eprintk("[%d]ticket:%d Acquired write lock\n", cur, my_ticket);
 				insertNode(&d->writeList, current->pid);
 				//skipping bubbles in assinging the next ticket
 				d->ticket_head++;
@@ -465,16 +494,16 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 				//d->ticket_tail++;
 				//d->write_ticket=cur;
 				filp->f_flags |= F_OSPRD_LOCKED;
-				osp_spin_unlock(&d->mutex);
-
+				
 				if (debug) print_osprd(d);
 				//wake_up_all(&d->blockq);
 				r=0;
+				osp_spin_unlock(&d->mutex);
 			}
 		} 
 		else 
 		{
-
+			eprintk("[%d]Attempting to acquire - read\n", cur);
 			if (wait_event_interruptible(d->blockq, my_ticket==d->ticket_head && !d->writeList)) 
 			{
 				//increment over interrupted process if killed
@@ -485,16 +514,29 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 
 				//insert current bubble into headList 
 				osp_spin_lock(&d->mutex);
+				eprintk("[%d]ticket:%d being killed\n", cur, my_ticket);
 				r= -ERESTARTSYS;
-				insertNode(&d->deadList, my_ticket);
+				if(my_ticket != d->ticket_head)
+				{
+					insertNode(&d->deadList, my_ticket);
+				}
+				else
+				{
+					d->ticket_head++;
+					while(removeNode(&d->deadList, d->ticket_head) == 0)
+					{
+						d->ticket_head++;
+					}
+				}
+				if (debug) print_osprd(d);
 				osp_spin_unlock(&d->mutex);
 			}
 			else 
 			{
 
-				eprintk("ticket:%d Acquired read lock\n", my_ticket);
-				osp_spin_lock(&d->mutex);
 				
+				osp_spin_lock(&d->mutex);
+				eprintk("[%d]ticket:%d Acquired read lock\n", cur, my_ticket);
 				//d->ticket_tail++;
 				//d->read_tickets[d->readlockset]=cur;
 				//d->readlockset++;
@@ -508,11 +550,13 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 				}
 
 				filp->f_flags |= F_OSPRD_LOCKED;//not sure if lock needed for read
-				osp_spin_unlock(&d->mutex);
+				
 
 				if (debug) print_osprd(d);
 				wake_up_all(&d->blockq);
 				r=0;
+
+				osp_spin_unlock(&d->mutex);
 			}
 		}
 	} else if (cmd == OSPRDIOCTRYACQUIRE) {
@@ -526,7 +570,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 
 		// Your code here (instead of the next two lines).
 
-		eprintk("Attempting to try acquire\n");
+		eprintk("[%d]Attempting to try acquire\n", cur);
 		r = -ENOTTY;
 
 
@@ -584,7 +628,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// you need, and return 0.
 
 		// Your code here (instead of the next line).
-		eprintk("Unlocking the ramdisk...\n");
+		eprintk("[%d]Unlocking the ramdisk...\n", cur);
 	
 		//check if lock is already unlocked
 
