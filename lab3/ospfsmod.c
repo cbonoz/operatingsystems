@@ -782,6 +782,36 @@ add_block(ospfs_inode_t *oi)
 	uint32_t *allocated[2] = { 0, 0 };
 
 	/* EXERCISE: Your code here */
+
+	// Sample
+	uint32_t b_no;
+	if (b_no = allocate_block())
+	{
+		memset(ospfs_block(b_no), 0, OSPFS_BLKSIZE);	//zero out the entire block
+		dir_oi->oi_size += OSPFS_BLKSIZE;				//update directory inode size
+
+		uint32_t dir_blk = ospfs_size2nblocks(oi->oi_size);
+		if (dir_blk <= OSPFS_NDIRECT)
+		{
+			dir_oi->oi_direct[direct_index(dir_blk - 1)] = b_no;
+		}
+		else if (dir_blk - OSPFS_NDIRECT <= OSPFS_NINDIRECT)
+		{
+			int index = direct_index(dir_blk - 1);
+			void * b_ptr = ospfs_block(dir_oi->oi_indirect);
+
+
+		}
+		else if (dir_blk < OSPFS_MAXFILEBLKS)
+		{
+
+		}
+		else
+		{
+
+		}
+
+
 	return -EIO; // Replace this line
 }
 
@@ -1103,9 +1133,10 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 
 	//first look through all the existing directory data for an empty entry
 	int off; 
-	for (off = 0; off < dir_oi->oi_size; off += OSPFS_DIRENTRY_SIZE)
+	ospfs_direntry_t *od;
+	for (off = 0; off < dir_oi->oi_size; off+=OSPFS_DIRENTRY_SIZE)
 	{
-		ospfs_direntry_t *od = ospfs_inode_data(dir_oi, off);
+		od = (ospfs_direntry_t*)ospfs_inode_data(dir_oi, off);
 		if(od->od_ino == 0)
 		{
 			return od;		
@@ -1113,71 +1144,16 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 	}
 
 	//there is no empty entries
-	uint32_t b_no;
-	if (b_no = allocate_block())
+	int errno = add_block(dir_oi);
+	if (errno == 0)
 	{
-		uint32_t b_ptr = ospfs_block(b_no);
-		memset((void *)b_ptr, 0, OSPFS_BLKSIZE);	//zero out the entire block
-		dir_oi->oi_size += OSPFS_BLKSIZE;				//update directory inode size
-		//uint32_t 2indir, indir, dir;
-
-		uint32_t dir_blk = ospfs_size2nblocks(dir_oi->oi_size);
-		if (dir_blk <= OSPFS_NDIRECT)
-		{
-			dir_oi->oi_direct[direct_index(dir_blk - 1)] = b_ptr;
-		}
-		else if (dir_blk - OSPFS_NDIRECT <= OSPFS_NINDIRECT)
-		{
-			dir_oi->oi_indirect
-		}
-		else if (dir_blk < OSPFS_MAXFILEBLKS)
-		{
-
-		}
-		else
-		{
-
-		}
-
-		// int32_t indir2_index(uint32_t b)
-
-
-		//	Returns the doubly-indirect block index for file block b.
-		//
-		// Inputs:  b -- the zero-based index of the file block (e.g., 0 for the first
-		//		 block, 1 for the second, etc.)
-		// Returns: 0 if block index 'b' requires using the doubly indirect
-		//	       block, -1 if it does not.
-		//
-		// EXERCISE: Fill in this function.
-
-
-		// int32_t indir_index(uint32_t b)
-		//	Returns the indirect block index for file block b.
-		//
-		// Inputs:  b -- the zero-based index of the file block
-		// Returns: -1 if b is one of the file's direct blocks;
-		//	    0 if b is located under the file's first indirect block;
-		//	    otherwise, the offset of the relevant indirect block within
-		//		the doubly indirect block.
-		//
-		// EXERCISE: Fill in this function.
-
-
-		// int32_t direct_index(uint32_t b)
-		//	Returns the direct block index for file block b.
-		//
-		// Inputs:  b -- the zero-based index of the file block
-		// Returns: the index of block b in the relevant indirect block or the direct
-		//	    block array.
-		//
-		// EXERCISE: Fill in this function.
-
+		//return the first direntry in the newly added block
+		return (ospfs_direntry_t*)ospfs_inode_data(dir_oi, dir_oi->oi_size - OSPFS_BLKSIZE);
 	}
 
-
-	/* EXERCISE: Your code here. */
-	return ERR_PTR(-EINVAL); // Replace this line
+	//if add_block failed
+	return ERR_PTR(errno);
+	//return ERR_PTR(-EINVAL); // Replace this line
 }
 
 // ospfs_link(src_dentry, dir, dst_dentry
