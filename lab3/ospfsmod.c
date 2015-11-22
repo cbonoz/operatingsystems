@@ -772,38 +772,39 @@ direct_index(uint32_t b)
 //     indirect blocks.
 //  3) update the oi->oi_size field
 
-static int add_block_helper(ospfs_inode_t *oi, uint32_t* allocated)
-{
-	int i;
-	b_no = allocate_block();				
-	if (b_no == 0)								//if allocation fails
-	{
-		for (i = 0; i<3, i++)
-		{
-			if(allocated[i])
-			{
-				free_block(allocated[i]);
-				oi->oi_size -= OSPFS_BLKSIZE;			//restore oi_size
-			}
-		}
-		return -ENOSPC;
-	}
-	else
-	{
-		for (i = 0; i<3, i++)
-		{
-			if(!allocated[i])
-			{
-				allocated[i] = b_no;
-			}
-		}
-		memset(ospfs_block(b_no), 0, OSPFS_BLKSIZE);
-		oi->oi_size += OSPFS_BLKSIZE;
-		return b_no;
-	}
+// static int add_block_helper(ospfs_inode_t *oi, uint32_t* allocated)
+// {
+// 	int i;
+// 	b_no = allocate_block();				
+// 	if (b_no == 0)								//if allocation fails
+// 	{
+// 		for (i = 0; i<3, i++)
+// 		{
+// 			if(allocated[i])
+// 			{
+// 				free_block(allocated[i]);
+// 				oi->oi_size -= OSPFS_BLKSIZE;			//restore oi_size
+// 			}
+// 		}
+// 		return -ENOSPC;
+// 	}
+// 	else
+// 	{
+// 		for (i = 0; i<3, i++)
+// 		{
+// 			if(!allocated[i])
+// 			{
+// 				allocated[i] = b_no;
+// 			}
+// 		}
+// 		memset(ospfs_block(b_no), 0, OSPFS_BLKSIZE);
+// 		oi->oi_size += OSPFS_BLKSIZE;
+// 		return b_no;
+// 	}
 	
-}
+// }
 
+//without helper function
 static int
 add_block(ospfs_inode_t *oi)
 {
@@ -811,17 +812,19 @@ add_block(ospfs_inode_t *oi)
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
 
 	// keep track of allocations to free in case of -ENOSPC
-	uint32_t allocated[3] = { 0, 0, 0};
+	//uint32_t allocated[3] = { 0, 0, 0};
 
 	/* EXERCISE: Your code here */
-	uint32_t b_no_data, b_no_indir, b_no_indir2;
+	uint32_t b_no_data, b_no_dir, b_no_indir;
 
 	//attempt to allocate data block
-	b_no_data = add_block_helper(oi, allocated);
-	if (b_no_data < 0)
+	b_no_data = allocate_block();
+	if (b_no_data == 0) 
 	{
-		return b_no_data;
+		return -ENOSPC;
 	}
+	memset(ospfs_block(b_no_data), 0, OSPFS_BLKSIZE);
+	oi->oi_size += OSPFS_BLKSIZE;
 	
 	//data block allocated
 	//case 1: new data block should be added in direct block
@@ -837,19 +840,22 @@ add_block(ospfs_inode_t *oi)
 		//if no indirect block exist, create one
 		if(oi->indirect == 0)							
 		{
-			b_no_indir = add_block_helper(oi, allocated);
-			if(b_no_indir < 0)
+			b_no_dir = allocate_block();
+			if(b_no_dir == 0)
 			{
-				return b_no_indir;
+				free_block(b_no_data);
+				oi->oi_size -= OSPFS_BLKSIZE;
+				return -ENOSPC;
 			}
-			oi->oi_indirect = b_no_indir;
+			memset(ospfs_block(b_no_dir), 0, OSPFS_BLKSIZE);
+			oi->oi_indirect = b_no_dir;
 		}
 
 		//allocation for the indirect block was successful 
 		//or indirect block already exist
-		uint32_t index = direct_index(b_total - 1);
-		uint32_t * b_ptr = (uint32_t *)ospfs_block(oi->oi_indirect);
-		b_ptr[index] = b_no_data;
+		uint32_t index_dir = direct_index(b_total - 1);
+		uint32_t * ptr_dir = (uint32_t *)ospfs_block(oi->oi_indirect);
+		ptr_dir[index_dir] = b_no_data;
 		return 0;
 	}
 	//case 3: new data block should be added in doubly indirect block
@@ -858,32 +864,39 @@ add_block(ospfs_inode_t *oi)
 		//if no doubly indirect block exist, create one 
 		if(oi->oi_indirect2 == 0)
 		{
-			b_no_indir2 = add_block_helper(oi, allocated);
-			if(b_no_indir2 < 0)
+			b_no_indir = allocate_block();
+			if(b_no_indir == 0)
 			{
-				return b_no_indir2;
+				free_block(b_no_data);
+				oi->oi_size -= OSPFS_BLKSIZE;
+				return -ENOSPC;
 			}
-			oi->oi_indirect2 = b_no_indir2;
+			memset(ospfs_block(b_no_indir), 0, OSPFS_BLKSIZE);
+			oi->oi_indirect2 = b_no_indir;
 		}
 
 		//if no indirect block exist, create one
-		uint32_t index = indir_index(b_total - 1);
-		uint32_t * b_ptr = (uint32_t *)ospfs_block(oi->oi_indirect2);
-		if(b_ptr[index] == 0)
+		uint32_t index_indir = indir_index(b_total - 1);
+		uint32_t * ptr_indir = (uint32_t *)ospfs_block(oi->oi_indirect2);
+		if(ptr_indir[index_indir] == 0)
 		{
-			b_no_indir = add_block_helper(oi, allocated);
-			if(b_no_indir < 0)
+			b_no_dir = allocate_block();
+			if(b_no_dir == 0)
 			{
-				return b_no_indir;
+				free_block(b_no_data);
+				free_block(b_no_indir);
+				oi->oi_size -= OSPFS_BLKSIZE;
+				return -ENOSPC;
 			}
-			b_ptr[index] = b_no_indir;
+			memset(ospfs_block(b_no_dir), 0, OSPFS_BLKSIZE);
+			ptr_indir[index_indir] = b_no_dir;
 		}
 
 		//allocation for the indirect and/or doubly indirect block were/was successful 
 		//or indirect and doubly indirect blocks already exist
-		uint32_t index_d = direct_index(b_total - 1);
-		uint32_t b_ptr_d = (uint32_t *)ospfs_block(b_ptr[index]);
-		b_ptr_d[index_d] = b_no_data;
+		uint32_t index_dir = direct_index(b_total - 1);
+		uint32_t * ptr_dir = (uint32_t *)ospfs_block(b_no_indir);
+		ptr_dir[index_dir] = b_no_data;
 		return 0;
 	}
 	else
@@ -896,6 +909,101 @@ add_block(ospfs_inode_t *oi)
 	}
 	return -EIO; // Replace this line
 }
+
+// static int
+// add_block(ospfs_inode_t *oi)
+// {
+// 	// current number of blocks in file
+// 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
+
+// 	// keep track of allocations to free in case of -ENOSPC
+// 	uint32_t allocated[3] = { 0, 0, 0};
+
+// 	/* EXERCISE: Your code here */
+// 	uint32_t b_no_data, b_no_indir, b_no_indir2;
+
+// 	//attempt to allocate data block
+// 	b_no_data = add_block_helper(oi, allocated);
+// 	if (b_no_data < 0)
+// 	{
+// 		return b_no_data;
+// 	}
+	
+// 	//data block allocated
+// 	//case 1: new data block should be added in direct block
+// 	uint32_t b_total = oi->oi_size/OSPFS_BLKSIZE;
+// 	if (b_total <= OSPFS_NDIRECT)
+// 	{
+// 		oi->oi_direct[direct_index(b_total - 1)] = b_no_data;
+// 		return 0;
+// 	}
+// 	//case 2: new data block should be added in indirect block
+// 	else if (dir_blk - OSPFS_NDIRECT <= OSPFS_NINDIRECT)
+// 	{
+// 		//if no indirect block exist, create one
+// 		if(oi->indirect == 0)							
+// 		{
+// 			b_no_indir = add_block_helper(oi, allocated);
+// 			if(b_no_indir < 0)
+// 			{
+// 				return b_no_indir;
+// 			}
+// 			oi->oi_indirect = b_no_indir;
+// 		}
+
+// 		//allocation for the indirect block was successful 
+// 		//or indirect block already exist
+// 		uint32_t index = direct_index(b_total - 1);
+// 		uint32_t * b_ptr = (uint32_t *)ospfs_block(oi->oi_indirect);
+// 		b_ptr[index] = b_no_data;
+// 		return 0;
+// 	}
+// 	//case 3: new data block should be added in doubly indirect block
+// 	else if (dir_blk < OSPFS_MAXFILEBLKS)
+// 	{	
+// 		//if no doubly indirect block exist, create one 
+// 		if(oi->oi_indirect2 == 0)
+// 		{
+// 			b_no_indir2 = add_block_helper(oi, allocated);
+// 			if(b_no_indir2 < 0)
+// 			{
+// 				return b_no_indir2;
+// 			}
+// 			oi->oi_indirect2 = b_no_indir2;
+// 		}
+
+// 		//if no indirect block exist, create one
+// 		uint32_t index = indir_index(b_total - 1);
+// 		uint32_t * b_ptr = (uint32_t *)ospfs_block(oi->oi_indirect2);
+// 		if(b_ptr[index] == 0)
+// 		{
+// 			b_no_indir = add_block_helper(oi, allocated);
+// 			if(b_no_indir < 0)
+// 			{
+// 				return b_no_indir;
+// 			}
+// 			b_ptr[index] = b_no_indir;
+// 		}
+
+// 		//allocation for the indirect and/or doubly indirect block were/was successful 
+// 		//or indirect and doubly indirect blocks already exist
+// 		uint32_t index_d = direct_index(b_total - 1);
+// 		uint32_t b_ptr_d = (uint32_t *)ospfs_block(b_ptr[index]);
+// 		b_ptr_d[index_d] = b_no_data;
+// 		return 0;
+// 	}
+// 	else
+// 	{
+// 		eprintk("add_block: total number of blocks needed out of range - %d", b_total);	
+// 		return -EIO
+// 	}
+
+// 						//update directory inode size
+// 	}
+// 	return -EIO; // Replace this line
+// }
+
+
 
 
 // remove_block(ospfs_inode_t *oi)
