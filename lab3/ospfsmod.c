@@ -850,6 +850,7 @@ add_block(ospfs_inode_t *oi)
 		uint32_t index = direct_index(b_total - 1);
 		uint32_t * b_ptr = (uint32_t *)ospfs_block(oi->oi_indirect);
 		b_ptr[index] = b_no_data;
+		return 0;
 	}
 	//case 3: new data block should be added in doubly indirect block
 	else if (dir_blk < OSPFS_MAXFILEBLKS)
@@ -883,6 +884,7 @@ add_block(ospfs_inode_t *oi)
 		uint32_t index_d = direct_index(b_total - 1);
 		uint32_t b_ptr_d = (uint32_t *)ospfs_block(b_ptr[index]);
 		b_ptr_d[index_d] = b_no_data;
+		return 0;
 	}
 	else
 	{
