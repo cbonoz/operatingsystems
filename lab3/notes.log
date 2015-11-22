@@ -1,0 +1,220 @@
+Lab 3: File system
+====
+
+Super block: meta-data describing the system
+e.g. Number of blocks
+
+Free block bit map, bit strings specify whether a block is used or not.
+0: used 1: free
+
+ex: block 0,1,3,9 used
+First byte: 00101111
+Second byte: 10111111
+Third byte: 11111111
+
+1 block = 2 sectors (1024 bytes)
+
+Meta data : file size, access permissions, data
+
+
+File System Structure:
+
+--- Block 0
+Boot sector
+Partition Table
+--- Block 1
+Super Block
+--- Block 2
+Free block bit map
+...
+--- Block M
+Inodes
+...
+--- Block K
+Data
+...
+--- Block N
+
+Next we give a short description of the main sections:
+
+ospfs - basically top level prefix for the file system objects
+
+Super Block:
+===
+
+ospfs_data is an array and points to the start of the file system in memory
+(points to block 0)
+
+We have a struct like this that defines the content of the super block
+
+typedef struct ospfs_super {
+
+	int os_magic; os_magic = OSPFS_MAGIC; //0x013101AE : ID of the filesystem
+	int os_nblocks; //number of blocks within the entire filesystem structure shown above
+	int os_ninodes; //number of inodes in the filesystem
+	int os_firstinob; //points to block M (start of inode block)
+
+} ospfs_super_t
+
+//The super block reference points to the super block and is defined as:
+
+static const ospfd_super_t *ospfs_super = (ospfs_super_t *) &ospfs_data[OSPFS_BLKSIZE];
+
+//with this, can access the content of the super block like this
+//ospfs_super->os_magic;
+
+Free Block Bit Map:
+===
+
+The skeleton code provides 4 API's to manipulate the bit string.
+
+//set the ith bit of the bitstring vector to 1.
+1. void bitvector_set(void *vector, int i)
+
+//clear the ith bit of the bitstring vector (set to 0)
+2. void bitvector_clear(void *vector, int i)
+
+//return the value of the ith bit of the bit stirng vector
+3. int bitvector_test(void *vector, int i)
+
+/*
+@param blockno number of the desired block
+@return pointer to block number
+*/
+4. static void *ospfs_block(uint32_t blockno) {
+	return &ospfs_data[blockno*OSPFS_BLKSIZE];
+} 
+
+//int = uint32_t
+
+/*
+This function will search the free block bit map for a free block
+Allocate it, and return the block number
+*/
+static int allocate_block() {
+	void *bitmap = ospfs_block[2]; //2 is the starting block of the free block bit map
+	int i;
+	for (i=2;i<ospfs->os_nblocks;i++) {
+		if (bitvector_test(bitmap,i)) {
+			bitvector_clear(bitmap, i);
+			return i;
+		}
+	}
+
+	return 0; //was not able to find a free block to allocate
+}
+
+Inode:
+===
+
+There are 3 types of files in the file system
+
+#define OSPFS_FTYPE_REG 0 //regular file
+#define OSPFS_FTYPE_DIR 1 //directory
+#define OSPFS_FTYPE_SYMLINK 2 //symbolic link
+
+There is also a structure that defines the inode:
+
+The regular file and the directory both use this structure.
+
+	typedef struct ospfs_inode {
+		uint32_t oi_size;                   // File size
+		uint32_t oi_ftype;                  // OSPFS_FTYPE_* constant
+		uint32_t oi_nlink;                  // Link count (0 means free)
+		uint32_t oi_mode;		    // File permissions mode
+		
+		uint32_t oi_direct[OSPFS_NDIRECT];  // Direct block pointers
+		uint32_t oi_indirect;               // Indirect block
+		uint32_t oi_indirect2;		    // Doubly indirect block
+	} ospfs_inode_t;
+
+The symbolic link uses another type of the inode:
+
+	typedef struct ospfs_inode {
+		uint32_t oi_size;                   // File size
+		uint32_t oi_ftype;                  // OSPFS_FTYPE_* constant
+		uint32_t oi_nlink;                  // Link count (0 means free)
+
+		char oi_symlink[OSPFS_MAXSYMLINKLEN+!]; // stores the path of the file where you created a symbolic link
+
+	} ospfs_symlink_inode_t;
+
+	ln -s prints the softlinks
+
+	ln -s /var/tmp/cat2 /var/tmp/cat1 
+	// will create a symbolic link from cat1 to cat2 - these are 2 different inocdes in the system (cat1 = ospfs_inode_symlink, cat2 = ospfs_inode). Os_symlink will store the string "/var/tmp/cat2"
+
+	-s: indicates a symbolic link creation
+	
+	oi_indirect points to another block in the filesystem (the value of oi_indirect indicates which block we are pointing to). The size of a block is 1024. Each pointer is 4 bytes - so we can hold 256 pointers to blocks
+
+	oi_indirect2 points to another block in the filesystem (second level of indirection). This block points to another block. This creates another level of indirection with 256 pointers to blocks. 
+
+	Thus we can have:
+
+	256*256+256 + 10 blocks (where 10=OSPFS_NDIRECT)
+
+Data:
+===
+
+The data in directory includes:
+	The information in the file (ex 3 files in /home/user)
+		/home/user -> 1.odd 2.txt 3.jpg
+
+		/home/user: ospfs_direntry_t //directory entry, each file will contain one directory entry as the parent
+
+	Will see 4 structures in the lab:
+
+		//these first 3 belong to the linux virtual filesystem
+		struct file
+		struct direntry (dentry)
+		struct inode
+
+		struct ospfs_inode_t
+
+
+===
+
+/*
+create a new blank file under the directory (this gets called when you call something like touch 1.txt)
+@param dir inode of the parent directory for the file
+@param dentry directory entry for the newly created file (basically stores the name '1.txt')
+@param mode access mode of the file
+@param nd don't worry about this
+*/
+static int ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidata *nd) {
+	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_no);
+	ospfs_inode_t *file_oi = NULL; //file of the inode we are going to create
+	ospfs_direntry_t *new_entry = NULL;
+	uint32_t entry_ino = 0;
+	uint32_t block_no = 0;
+	entry_ino = find_free_inode(); //assign a free inode number to the entry
+	//initialize the inode for the file
+	file_oi = ospfs_inode(entry_ino);
+	file_oi->oi_size = 0;
+	file_oi->oi_type = OSPFS_FTYPE_REG;
+	file_oi->oi_nlink=1;
+	file_oi->oi_mode=mode;
+
+	//initialize the new directory entry
+	//we need to implement this (create new directory given the directory number)
+	new_entry = create_blank_direntry(dir_oi);
+
+	//copy the entry number and name
+	new_entry->od_ino=entry_ino;
+	memcpy(new_entry->od_name, dentry->d_name.name, dentry->d_name.len);
+	new_entry->od_name[dentry->d_name.len] = "\0";
+
+	return 0;
+}
+
+
+
+
+
+
+
+
+
+
+

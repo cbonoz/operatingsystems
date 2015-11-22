@@ -1,0 +1,37 @@
+# Fill in your name, student ID, and email address in this file.
+# If you are working in a team, fill out the information for both team 
+# members.
+
+# SUBMIT THE LAB ONLY ONCE (from only one partner). This file will be
+# automatically parsed in order to give both team members credit for the
+# lab.
+
+# If you did one or more extra credit problems, indicate which one in the
+# appropriate section below (remove the # sign first). If you have any other
+# information you'd like us to know, please add it at the end of the file.
+
+# Partner 1
+<<<<<<< HEAD
+Name: Chris Buonocore
+Student ID: 904587506
+Email: cbuonocore@ucla.edu
+
+# Partner 2
+Name: Yuanchen Liu
+Student ID: 503392352
+Email: liulewie@gmail.com
+=======
+Name: 
+Student ID: 
+Email: 
+
+# Partner 2 (if you're working in a team)
+Name: 
+Student ID: 
+Email: 
+>>>>>>> 66c7ab029c638adc1ec6448967ed1b1c962dde04
+
+# Extra credit problems
+#Extra credit problem: none
+
+# Add any other information you'd like us to know below this line.
