@@ -11,7 +11,7 @@
 # information you'd like us to know, please add it at the end of the file.
 
 # Partner 1
-<<<<<<< HEAD
+
 Name: Chris Buonocore
 Student ID: 904587506
 Email: cbuonocore@ucla.edu
@@ -20,16 +20,6 @@ Email: cbuonocore@ucla.edu
 Name: Yuanchen Liu
 Student ID: 503392352
 Email: liulewie@gmail.com
-=======
-Name: 
-Student ID: 
-Email: 
-
-# Partner 2 (if you're working in a team)
-Name: 
-Student ID: 
-Email: 
->>>>>>> 66c7ab029c638adc1ec6448967ed1b1c962dde04
 
 # Extra credit problems
 #Extra credit problem: none
