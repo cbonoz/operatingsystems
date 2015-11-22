@@ -11,16 +11,16 @@
 # information you'd like us to know, please add it at the end of the file.
 
 # Partner 1
-Name: 
-Student ID: 
-Email: 
 
-# Partner 2 (if you're working in a team)
-Name: 
-Student ID: 
-Email: 
+Name: Chris Buonocore
+Student ID: 904587506
+Email: cbuonocore@ucla.edu
 
-# Extra credit problems
-#Extra credit problem: none
+# Partner 2
+Name: Yuanchen Liu
+Student ID: 503392352
+Email: yuanchen@ucla.edu
+
+# Extra credit problem: none
 
 # Add any other information you'd like us to know below this line.

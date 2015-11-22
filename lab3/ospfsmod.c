@@ -31,6 +31,8 @@
  * and KERN_EMERG will make sure that you will see messages.) */
 #define eprintk(format, ...) printk(KERN_NOTICE format, ## __VA_ARGS__)
 
+#define BITS_PER_BM_BLOCK 8192
+
 // The actual disk data is just an array of raw memory.
 // The initial array is defined in fsimg.c, based on your 'base' directory.
 extern uint8_t ospfs_data[];
@@ -448,6 +450,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		ospfs_direntry_t *od;
 		ospfs_inode_t *entry_oi;
 
+
 		/* If at the end of the directory, set 'r' to 1 and exit
 		 * the loop.  For now we do this all the time.
 		 *
@@ -458,6 +461,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 			r = 1;		/* Fix me! */
 			break;		/* Fix me! */
 		}
+
 
 		/* Get a pointer to the next entry (od) in the directory.
 		 * The file system interprets the contents of a
@@ -503,6 +507,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 			ok_so_far = filldir(dirent, od->od_name, strlen(od->od_name), f_pos, entry_oi, dtype);
 		}
 		f_pos++;
+
 	}
 
 	// Save the file position and return!
@@ -579,8 +584,19 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 static uint32_t
 allocate_block(void)
 {
-	/* EXERCISE: Your code here */
-	return 0;
+
+
+	void *bitmap = ospfs_block[2]; //2 is the starting block of the free block bit map
+	int i;
+	for (i=2;i<ospfs->os_nblocks;i++) {
+		if (bitvector_test(bitmap,i)) {
+			bitvector_clear(bitmap, i);
+			return i;
+		}
+	}
+
+	return 0; //was not able to find a free block to allocate
+
 }
 
 
@@ -595,11 +611,30 @@ allocate_block(void)
 //   number isn't obviously bogus: the boot sector, superblock, free-block
 //   bitmap, and inode blocks must never be freed.  But this is not required.)
 
+
+//in bitmap: 0: used, 1: free
 static void
 free_block(uint32_t blockno)
 {
-	/* EXERCISE: Your code here */
-}
+	const int first_data_block = 
+		ospfs_super->os_firstinob + ospfs_size2nblocks(ospfs_super->os_ninodes*OSPFS_INODESIZE);
+
+
+
+	if (blockno<first_data_block || blockno>=ospfs_super->os_nblocks) {
+		eprintk("\nfree_block: Attempted to free block out of valid range %d", blockno);
+		return;
+	}
+
+	void *bitmap = ospfs_block[2];
+
+	if (bitvector_test(bitmap, blockno)) {
+		eprintk("free_block: Attempted to free block that was already free");
+		return;
+	} else {
+		bitvector_set(bitmap, blockno);
+	}
+	
 
 
 /*****************************************************************************
@@ -635,6 +670,11 @@ static int32_t
 indir2_index(uint32_t b)
 {
 	// Your code here.
+
+	//if b is in the doubly indirect block range
+	if (b<OSPFS_MAXFILEBLKS && b>(OSPFS_NDIRECT+OSPFS_NINDIRECT))
+		return 0;
+
 	return -1;
 }
 
@@ -650,13 +690,28 @@ indir2_index(uint32_t b)
 //
 // EXERCISE: Fill in this function.
 
+
 static int32_t
 indir_index(uint32_t b)
 {
-	// Your code here.
+	//int fb = ospfs_super->os_firstinob;
+
+	//b is zero-based index from the firstinob (check that b is valid first)
+	if (b<0 || b>=OSPFS_MAXFILEBLKS) {
+		eprintk("indir_index: called with b out of range - %d",b);
+		return b;
+	}
+
+	if (b<OSPFS_NDIRECT)
+		return -1;
+	else if (b<(OSPFS_NDIRECT+OSPFS_NINDIRECT))
+		return 0;
+	else 
+		return (b - OSPFS_NINDIRECT - OSPFS_NDIRECT) / OSPFS_NINDIRECT;
+
+	//shouldn't get here
 	return -1;
 }
-
 
 // int32_t direct_index(uint32_t b)
 //	Returns the direct block index for file block b.
@@ -670,7 +725,18 @@ indir_index(uint32_t b)
 static int32_t
 direct_index(uint32_t b)
 {
+
+	int index_type = indir_index(b);
 	// Your code here.
+	switch(index_type) {
+		case -1: //direct
+			return b;
+		case 0: //indirect
+			return b - OSPFS_NDIRECT;
+		default: //doubly indirect
+			return (b - OSPFS_NINDIRECT - OSPFS_NDIRECT) % OSPFS_NINDIRECT;
+	}
+
 	return -1;
 }
 
@@ -1024,6 +1090,7 @@ find_direntry(ospfs_inode_t *dir_oi, const char *name, int namelen)
 //
 // EXERCISE: Write this function.
 
+
 static ospfs_direntry_t *
 create_blank_direntry(ospfs_inode_t *dir_oi)
 {
@@ -1108,6 +1175,7 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 
 	}
 
+
 	/* EXERCISE: Your code here. */
 	return ERR_PTR(-EINVAL); // Replace this line
 }
@@ -1143,7 +1211,25 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 
 static int
 ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dentry) {
-	/* EXERCISE: Your code here. */
+
+
+	dst_dentry->d_inode->i_ino=src_dentry->d_inode->i_ino
+	if (src_dentry->d_name.len >= OSPFS_MAXNAMELEN)
+		return -ENAMETOOLONG;
+
+	//copy src name
+	//memcpy(dest, src, size)
+	memcpy(dst_dentry->d_name.name,src_dentry->d_name.name,src_dentry->d_name.len);
+	dst_dentry->d_name.name[dentry->d_name.len]="\0";
+
+	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
+	//if file exists in the dir already
+	if (file_exists(dir_oi) 
+		return -EEXIST;
+
+	//TODO : allocate space for dst directory in dir
+
+
 	return -EINVAL;
 }
 
@@ -1176,13 +1262,67 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 //
 //   EXERCISE: Complete this function.
 
+
+
+static int 
+find_free_inode() {
+
+	ospfs_inode_t *cur_inode;
+	int i;
+
+	for (i=0;i<ospfs_super->os_ninodes;i++) {
+		cur_inode = ospfs_inode(i);
+
+		//
+		if (!cur_inode->oi_nlink) {
+			return i;
+		}
+	}
+	eprintk("\nfind_free_inode: could not find a free inode");
+	//no free inodes - panic
+	return -1;
+}
+
+
+
+
+
 static int
 ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidata *nd)
 {
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = 0;
+
+	uint32_t block_no = 0;
+	
 	/* EXERCISE: Your code here. */
-	return -EINVAL; // Replace this line
+	ospfs_inode_t *file_oi = NULL; //file of the inode we are going to create
+	ospfs_direntry_t *new_entry = NULL;
+	
+	
+	entry_ino = find_free_inode(); //assign a free inode number to the entry
+	//initialize the inode for the file
+	file_oi = ospfs_inode(entry_ino);
+	file_oi->oi_size = 0;
+	file_oi->oi_ftype = OSPFS_FTYPE_REG;
+	file_oi->oi_nlink=1;
+	file_oi->oi_mode=mode;
+
+	//clear bitmap
+
+	//initialize the new directory entry
+	//we need to implement this (create new directory given the directory number)
+	new_entry = create_blank_direntry(dir_oi);
+
+	//copy the entry number and set the name
+	if (dentry->d_name.len> OSPFS_OSPFS_MAXNAMELEN) {
+		return -ENAMETOOLONG;
+	}
+
+	new_entry->od_ino=entry_ino;
+	memcpy(new_entry->od_name, dentry->d_name.name, dentry->d_name.len);
+	new_entry->od_name[dentry->d_name.len] = "\0";
+
 
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
@@ -1222,11 +1362,40 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 static int
 ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 {
+
+
+
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = 0;
+	uint32_t block_no = 0;
+	
+	
+	ospfs_symlink_inode_t *file_oi = NULL; 
+	ospfs_direntry_t *new_entry = NULL;
+	
+	//assign a free inode number to the entry
+	entry_ino = find_free_inode(); 
 
-	/* EXERCISE: Your code here. */
-	return -EINVAL;
+	//initialize the symlink inode for the file
+	file_oi = ospfs_inode(entry_ino);
+	file_oi->oi_size = 0;
+	file_oi->oi_ftype = OSPFS_FTYPE_SYMLINK;
+	file_oi->oi_nlink=1;
+
+
+	new_entry = create_blank_direntry(dir_oi);
+	new_entry->size = 0;
+	new_entry->oi_ftype = OSPFS_FTYPE_SYMLINK;
+	//	new_entry->oi_nlink = ?;
+
+
+	if (dentry->d_name.len> OSPFS_MAXSYMLINKLEN) {
+		return -ENAMETOOLONG;
+	}
+
+	//copy over the directory filename
+	memcpy(new_entry->oi_symlink, desnty->d_name.name, dentry->d_name.len);
+	new_entry->oi_symlink[dentry->d_name.len] = "\0";
 
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
