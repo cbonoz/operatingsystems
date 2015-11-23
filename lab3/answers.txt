@@ -19,9 +19,8 @@ Email: cbuonocore@ucla.edu
 # Partner 2
 Name: Yuanchen Liu
 Student ID: 503392352
-Email: liulewie@gmail.com
+Email: yuanchen@ucla.edu
 
-# Extra credit problems
-#Extra credit problem: none
+# Extra credit problem: none
 
 # Add any other information you'd like us to know below this line.

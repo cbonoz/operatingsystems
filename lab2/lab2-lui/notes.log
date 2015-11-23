@@ -1,0 +1,185 @@
+Lab 2
+===
+Ram disk module
+
+Kernel module - a set of dynamically linkable code
+
+Hard disk in RAM - SECTOR_SIZE = 512 bytes
+Memory: Ram Disks
+
+Disk is a Long array of sectors [0,1,..,N] in memory (simulating a disk)
+
+user level process: osprd.c
+The user level program will do several system calls (open, close, io control (ioctl) commands to a device called /dev/osprda). 
+The user level program will call corresponding methods in the kernel.
+In the kernel module the corresponding function is called osprd_open. When you call close, osprd_release will be called. ioctl will call osprd_ioctl. When read/write, osprd_process_request_queue will be called.
+kernel module: ospid.ko
+
+Goals:
+
+1. Read/write functionality of the ramdisk
+2. Implement the lock mechanism of the ramdisk
+3. Detect and prevent deadlock
+
+1)
+/*
+@param q linked list request0 -> request1 -> ..
+Each request can be a read or a write request. In the real world, there may be several other processes that can call read/write on the disk. The kernel will batch those requests and insert them appropriately into the request queue.
+
+
+*/
+static void osprd_process_request_queue_t *q) {
+	while ((req=elv_next_request(q))!=NULL) {
+		osprd_process_request(d,req); //d is the device descriptor of the current ramdisk.
+
+	}
+}
+/*
+We are asked to implement this function which will perform a single read or write from the request
+@param osprd_info_t device descriptor of the ramdisk and contains a member uint_t *data which is a pointer to the long array of data we are simulating as a disk. There are other attrs in the osprd_info struct. We can use a function called rq_data_dir(request) which will return 2 macros called either READ or WRITE depending on the type of request.
+
+
+	//memcpy(dest, source, size)//destination source
+*/
+void osprd_process_request(osprd_info_t *d, struct request *req) {
+	//first determine if a read or write
+
+	if (rq.data_dir(req)==READ) {
+		memcpy(req->buffer, d->data + (req->sector*SECTOR_SIZE), req->current_nr_sector*SECTOR_SIZE);
+		
+	}
+	else {
+		memcpy(d->data + (req->sector*SECTOR_SIZE), req->buffer,  req->current_nr_sector*SECTOR_SIZE);
+	}
+
+	end_request(req,1);
+
+
+}
+
+
+struct request {
+	unsigned long sector; //number of the starting sector of the ramdisk (offset n data within the ramdisk)
+	unsigned long current_nr_sector;//number of sectors we want to write (size)
+	char *buffer //read request: data -> buffer, write request: source buffer -> data
+}
+
+
+2)
+Implement Lock -> Ticket Lock
+
+Suppose we have 3 processes and memory. The latency order is P1 < P2 < P3 (P1 is the fastest in accessing memory)
+
+They each execute:
+
+while (1) {
+	spinlock(t); //t is the lock
+
+	//CRITICAL SECTION
+
+	spintock(t);
+
+
+}
+
+P1 will get the lock first (fastest)
+P2, P3 spinning
+
+P1 will complete critical section
+
+P1 will release lock
+P2 will get lock
+P3 spinning
+
+P2 will release lock
+P1 has looped around in the while loop
+P1 will get lock again (faster than P3)
+P3 continues to spin (this is a problem -> P3 will not get lock)
+===
+
+Thus we need to implement a Ticket Lock (similar to how the DMC serves guests).
+
+In the ticket lock we have 2 arguments (now_serving, next_ticket)
+
+When you init the ticket lock
+void init() {
+	now_serving=0;
+	next_ticket=0;
+
+}
+
+void spinlock (t) {
+	if my_ticket=next_ticket++; //this should be atomic
+	//once now_serving is your ticket, proceed
+	while (now_serving!=my_ticket)
+		lock(t);
+
+}
+
+
+void spinunlock(t) {
+	unlock(t)
+	now_serving++;
+}
+
+
+Lock:
+Read - non-blocking (parallel)
+if fail, return
+write - blocking
+if fail, sleep the process and wake it up once available.
+
+we just have one lock for the whole ramdisk (could have individual locks for each sector - not doing it this way)
+
+1. get read lock -> fine if no one holds write lock
+2. get write lock -> fine if no one holds read or write lock
+3. my_ticket ==  ticket_head (condition to hold a lock)
+
+All the locks should be served as FIFO
+
+/*
+@param condition is some boolean like a==1
+
+when called: if condition is true, return 0. If condition is false, then put the process (current process) to sleep, and add to wait_queue_t q
+int wait_event_interruptible(wait_queue_t q, CONDITION) {
+	
+}
+/*
+Used to notify / wake up processes that are sleeping when lock released
+wakes up all the waiting processes in q 
+
+*/
+void wake_up_all(wait_queue_t q) {
+	if condition is true, wake up process. wait event returns 0. If condition is false, do not wake up.
+	if the process receives a signal, it will wake up regardless of the condition and return -ERESTARTSYS;
+}
+
+//process descriptor
+osprd_info_t {
+	uint_t *data;
+	osp_spinlock_t mutex;
+	unsigned int ticket_head; //now_serving
+	unsigned int ticket_tail; //next_ticket
+	wait_queue_head_t blockq; //wait queue for wait_event_interruptible
+
+	process_queue writelockset; // -> all the processes that hold the write lock
+	process_queue readlockset; // -> all the processes that hold the read lock
+}
+
+//acquire lock code
+spinlock(mutex);
+my_ticket = d->ticket_tail++;
+spinunlock(mutex);
+if (wait_event_interruptible(d->blockq, my_ticket==d->ticket_head && !d->writelockset && !d->readlockset) {
+	//mark the current thread as not served
+	return -ERESTARTSYS;
+}
+
+spinlock(mutex);
+//add current thread to d->writelockset
+//mark current RAMdisk as locked
+spinunlock(mutex);
+
+//release lock
+wake_up_all(d->blockq);
+
