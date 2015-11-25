@@ -92,8 +92,8 @@ static struct inode_operations ospfs_symlink_inode_ops;
 static struct dentry_operations ospfs_dentry_ops;
 static struct super_operations ospfs_superblock_ops;
 
-
 static int debug = 1;
+
 /*****************************************************************************
  * BITVECTOR OPERATIONS
  *
@@ -463,6 +463,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 		if (f_pos >= dir_oi->oi_size/OSPFS_DIRENTRY_SIZE)
 		{
+			if (debug) eprintk("\nospfs_dir_readdir: terminated with f_pos=%d, dir_oi->oi_size/OSPFS_DIRENTRY_SIZE=%d\n", f_pos, dir_oi->oi_size/OSPFS_DIRENTRY_SIZE);
 			r = 1;		/* Fix me! */
 			break;		/* Fix me! */
 		}
@@ -494,6 +495,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 		if(od->od_ino)
 		{
+			if (debug) eprintk("ospfs_dir_readdir: f_pos = %d, inode = %d, name= %s\n", f_pos, od->od_ino, od->od_name);
 			entry_oi = ospfs_inode(od->od_ino);
 			int ftype;
 			ftype = entry_oi->oi_ftype;
@@ -565,6 +567,7 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 	oi->oi_nlink--;
 
 	if(oi->oi_nlink == 0 &&  oi->oi_ftype == OSPFS_FTYPE_REG) {
+		if (debug) eprintk("\nospfs_unlink: nlink == 0 now\n");
 		change_size(oi, 0);
 		oi->oi_size=0;
 
@@ -982,10 +985,10 @@ remove_block(ospfs_inode_t *oi)
 	//case 1: last block is found in direct block
 	if (n <= OSPFS_NDIRECT)
 	{
-		if (debug) eprintk("remove_block: n = %d\n", n);
+		if (debug) eprintk("remove_block (case 1): n = %d\n", n);
 		index_dir = direct_index(n-1);
 		if(oi->oi_direct[index_dir] == 0){
-			if (debug) eprintk("remove_block: index_dir = %d\n", index_dir);
+			//if (debug) eprintk("remove_block: index_dir = %d\n", index_dir);
 			return -EIO;
 		}
 			
@@ -997,6 +1000,7 @@ remove_block(ospfs_inode_t *oi)
 	//case 2: last block is found in indirect block
 	else if (n - OSPFS_NDIRECT <= OSPFS_NINDIRECT)
 	{
+		if (debug) eprintk("remove_block (case 2): n = %d\n", n);
 		index_dir = direct_index(n-1);
 		ptr_dir = (uint32_t *)ospfs_block(oi->oi_indirect);
 		if(ptr_dir[index_dir] == 0)
@@ -1004,7 +1008,7 @@ remove_block(ospfs_inode_t *oi)
 		free_block(ptr_dir[index_dir]);
 		ptr_dir[index_dir] = 0;
 
-		if(index_dir == 1)
+		if(index_dir == 0)
 		{
 			if(oi->oi_indirect == 0)
 				return -EIO;
@@ -1018,6 +1022,7 @@ remove_block(ospfs_inode_t *oi)
 	//case 3: last block is found in doubly indirect block
 	else if (n < OSPFS_MAXFILEBLKS)
 	{
+		if (debug) eprintk("remove_block (case 3): n = %d\n", n);
 		index_indir = indir_index(n-1);
 		ptr_indir = ospfs_block(oi->oi_indirect2);
 
@@ -1027,7 +1032,7 @@ remove_block(ospfs_inode_t *oi)
 		free_block(ptr_dir[index_dir]);
 		ptr_dir[index_dir] = 0;
 
-		if(index_dir == 1)
+		if(index_dir == 0)
 		{
 			if(ptr_indir[index_indir] == 0)
 				return -EIO;
