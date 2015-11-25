@@ -456,7 +456,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		 *
 		 * EXERCISE: Your code here */
 
-		if (f_pos > dir_oi->oi_size/OSPFS_DIRENTRY_SIZE)
+		if (f_pos >= dir_oi->oi_size/OSPFS_DIRENTRY_SIZE)
 		{
 			r = 1;		/* Fix me! */
 			break;		/* Fix me! */
@@ -486,10 +486,10 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		/* EXERCISE: Your code here */
 
 		od = ospfs_inode_data(dir_oi, f_pos * OSPFS_DIRENTRY_SIZE);
-		entry_oi = ospfds_inode(od->od_ino);
 
 		if(od->od_ino)
 		{
+			entry_oi = ospfds_inode(od->od_ino);
 			char ftype = entry_oi->oi_ftype;
 			char dtype; 
 			if(ftype == OSPFS_FTYPE_REG)
@@ -535,6 +535,11 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 	ospfs_inode_t *dir_oi = ospfs_inode(dentry->d_parent->d_inode->i_ino);
 	int entry_off;
 	ospfs_direntry_t *od;
+
+	if(oi->oi_ftype == OSPFS_FTYPE_SYMLINK)
+	{
+		
+	}
 
 	od = NULL; // silence compiler warning; entry_off indicates when !od
 	for (entry_off = 0; entry_off < dir_oi->oi_size;
@@ -1162,9 +1167,18 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 		// retval = -EIO; // Replace these lines
 		// goto done;
 
-		
-		if(copy_to_user(buffer, data, n)>0)
+		uint32_t offset = *f_pos % OSPFS_BLKSIZE;
+		data += offset;
+
+		//count - amount is the size remaining to be read to user
+		//OSPFS_BLKSIZE - offset is the size remaining that can be read within the current block
+		n = (count - amount <= OSPFS_BLKSIZE - offset)? count - amount: OSPFS_BLKSIZE - offset;
+		uint32_t not_copied = copy_to_user(buffer, data, n);
+		if(not_copied>0)
+		{
 			retval = -EIO;
+			n = n - not_copied;
+		}
 
 		buffer += n;
 		amount += n;
@@ -1204,9 +1218,16 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 	// use struct file's f_flags field and the O_APPEND bit.
 	/* EXERCISE: Your code here */
 
+	int o_append_flag = file->f_flags & O_APPEND>0?1:0;
+
 	// If the user is writing past the end of the file, change the file's
 	// size to accomodate the request.  (Use change_size().)
 	/* EXERCISE: Your code here */
+
+	if (*f_pos + count > oi->oi_size)
+	{
+		change_size(oi, *f_pos + count);
+	}
 
 	// Copy data block by block
 	while (amount < count && retval >= 0) {
@@ -1226,8 +1247,22 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 		// read user space.
 		// Keep track of the number of bytes moved in 'n'.
 		/* EXERCISE: Your code here */
-		retval = -EIO; // Replace these lines
-		goto done;
+		// retval = -EIO; // Replace these lines
+		// goto done;
+
+		uint32_t offset = *f_pos % OSPFS_BLKSIZE;
+		data += offset;
+
+		//count - amount is the size remaining to be read to user
+		//OSPFS_BLKSIZE - offset is the size remaining that can be read within the current block
+		n = (count - amount <= OSPFS_BLKSIZE - offset)? count - amount: OSPFS_BLKSIZE - offset;
+		uint32_t not_copied = copy_from_user(data, buffer, n);
+		
+		if(not_copied>0)
+		{
+			retval = -EIO;
+			n = n - not_copied;
+		}
 
 		buffer += n;
 		amount += n;
