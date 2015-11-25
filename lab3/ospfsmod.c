@@ -318,11 +318,12 @@ ospfs_get_sb(struct file_system_type *fs_type, int flags, const char *dev_name, 
 
 
 // ospfs_delete_dentry
-//	Another bookkeeping function.
+// Another bookkeeping function.
 
 static int
 ospfs_delete_dentry(struct dentry *dentry)
 {
+	//free(dentry);
 	return 1;
 }
 
@@ -619,8 +620,7 @@ allocate_block(void)
 
 //in bitmap: 0: used, 1: free
 static void
-free_block(uint32_t blockno)
-{
+free_block(uint32_t blockno) {
 	const int first_data_block = 
 		ospfs_super->os_firstinob + ospfs_size2nblocks(ospfs_super->os_ninodes*OSPFS_INODESIZE);
 
@@ -639,6 +639,7 @@ free_block(uint32_t blockno)
 	} else {
 		bitvector_set(bitmap, blockno);
 	}
+}
 	
 
 
@@ -1242,6 +1243,7 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 
 		data = ospfs_block(blockno);
 
+
 		// Figure out how much data is left in this block to write.
 		// Copy data from user space. Return -EFAULT if unable to read
 		// read user space.
@@ -1346,7 +1348,7 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 	ospfs_direntry_t *od;
 	for (off = 0; off < dir_oi->oi_size; off+=OSPFS_DIRENTRY_SIZE)
 	{
-		od = (ospfs_direntry_t*)ospfs_inode_data(dir_oi, off);
+		od = (ospfs_direntry_t*) ospfs_inode_data(dir_oi, off);
 		if(od->od_ino == 0)
 		{
 			return od;		
@@ -1358,7 +1360,7 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 	if (errno == 0)
 	{
 		//return the first direntry in the newly added block
-		return (ospfs_direntry_t*)ospfs_inode_data(dir_oi, dir_oi->oi_size - OSPFS_BLKSIZE);
+		return (ospfs_direntry_t*) ospfs_inode_data(dir_oi, dir_oi->oi_size - OSPFS_BLKSIZE);
 	}
 
 	//if add_block failed
@@ -1398,25 +1400,39 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 static int
 ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dentry) {
 
+	//not sure if I need this one other than for find_direntry
+	ospfs_inode_t *dir_inode = ospfs_inode(dir->i_ino);
 
-	dst_dentry->d_inode->i_ino=src_dentry->d_inode->i_ino
-	if (src_dentry->d_name.len >= OSPFS_MAXNAMELEN)
+	//ospfs_inode_t *dst_inode = ospfs_inode(dst_dentry->d_inode->i_ino);
+	ospfs_inode_t *src_inode = ospfs_inode(src_dentry->d_inode->i_ino)
+
+	int name_len = src_dentry->d_name.len
+
+	if (name_len >= OSPFS_MAXNAMELEN)
 		return -ENAMETOOLONG;
-
-	//copy src name
-	//memcpy(dest, src, size)
-	memcpy(dst_dentry->d_name.name,src_dentry->d_name.name,src_dentry->d_name.len);
-	dst_dentry->d_name.name[dentry->d_name.len]="\0";
-
-	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
+	
 	//if file exists in the dir already
-	if (file_exists(dir_oi) 
+	if (find_direntry(dir_inode, dst_dentry->d_name.name, name_len))
 		return -EEXIST;
 
-	//TODO : allocate space for dst directory in dir
+	//allocate space for dst directory in dir
+	ospfs_direntry_t *new_od=create_blank_direntry();
 
+	//problem with creating new direntry
+	if (IS_ERR(new_od))
+		return PTR_ERR(new_od);
 
-	return -EINVAL;
+	//set the inode ino, copy the name, increase the number of links
+	new_od->od_ino=src_dentry->d_inode->i_ino;
+	dst_dentry->d_inode->i_ino = src_dentry->d_inode->i_ino;
+
+	memcpy(new_od->od_name,dst_dentry->d_name.name,name_len);
+	new_od->od_name[name_len]="\0";
+
+	src_inode->oi_nlink++; 
+	
+	return 0;
+
 }
 
 // ospfs_create
@@ -1452,22 +1468,22 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 
 static int 
 find_free_inode() {
-
 	ospfs_inode_t *cur_inode;
 	int i;
 
 	for (i=0;i<ospfs_super->os_ninodes;i++) {
 		cur_inode = ospfs_inode(i);
 
-		//
+		//if inode has no hard links then it can be used
 		if (!cur_inode->oi_nlink) {
 			return i;
 		}
 	}
 	eprintk("\nfind_free_inode: could not find a free inode");
 	//no free inodes - panic
-	return -1;
+	return -ENOSPC;
 }
+
 
 
 
@@ -1478,17 +1494,16 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 {
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = 0;
-
 	uint32_t block_no = 0;
 	
 	/* EXERCISE: Your code here. */
-	ospfs_inode_t *file_oi = NULL; //file of the inode we are going to create
-	ospfs_direntry_t *new_entry = NULL;
+	//file_oi: file of the inode we are going to create
+	
 	
 	
 	entry_ino = find_free_inode(); //assign a free inode number to the entry
 	//initialize the inode for the file
-	file_oi = ospfs_inode(entry_ino);
+	ospfs_inode_t *file_oi file_oi = ospfs_inode(entry_ino);
 	file_oi->oi_size = 0;
 	file_oi->oi_ftype = OSPFS_FTYPE_REG;
 	file_oi->oi_nlink=1;
@@ -1498,7 +1513,9 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 
 	//initialize the new directory entry
 	//we need to implement this (create new directory given the directory number)
-	new_entry = create_blank_direntry(dir_oi);
+	ospfs_direntry_t *new_entry = create_blank_direntry(dir_oi);
+	if (IS_ERR(od))
+		return PTR_ERR(od);
 
 	//copy the entry number and set the name
 	if (dentry->d_name.len> OSPFS_OSPFS_MAXNAMELEN) {
@@ -1615,6 +1632,30 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 	ospfs_symlink_inode_t *oi =
 		(ospfs_symlink_inode_t *) ospfs_inode(dentry->d_inode->i_ino);
 	// Exercise: Your code here.
+
+	// symbolic link parser (not tested according to TA)
+	// if(strncmp(oi->oi_symlink,"root?", 5) == 0) {
+	// 	int length = strlen(oi->oi_symlink);
+	// 	for(i =0; i <length; i++) {
+	// 		if(oi->oi_symlink[i] == ":") {
+	// 			oi->oi_symlink[i] = '\0'; //end loop when end of first path
+	// 			break;
+	// 		}
+	// 	}
+
+
+	// 	//check the current file
+
+	// 	if(current->uid==0) {
+	// 		nd_set_link(nd, oi->oi_symlink + 5);
+	// 		eprintk("follow link filename: %s\n", oi->oi_symlink + i + 1);	
+	// 	}
+	// 	else {
+	// 		nd_set_link(nd,oi->oi_symlink + i + 1);
+	// 		eprintk("follow link filename: %s\n", oi->oi_symlink + i + 1);	
+	// 		return (void *) 0;
+	// 	}
+	// }
 
 	nd_set_link(nd, oi->oi_symlink);
 	return (void *) 0;
