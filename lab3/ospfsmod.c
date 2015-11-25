@@ -375,6 +375,7 @@ ospfs_dir_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *ign
 		if (od->od_ino > 0
 		    && strlen(od->od_name) == dentry->d_name.len
 		    && memcmp(od->od_name, dentry->d_name.name, dentry->d_name.len) == 0) {
+			if (debug) eprintk("\nospfs_dir_lookup: f_pos = %d, inode_no =%d", entry_off/OSPFS_DIRENTRY_SIZE,od->od_ino);
 			entry_inode = ospfs_mk_linux_inode(dir->i_sb, od->od_ino);
 			if (!entry_inode)
 				return (struct dentry *) ERR_PTR(-EINVAL);
@@ -439,12 +440,25 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	// f_pos is an offset into the directory's data, plus two.
 	// The "plus two" is to account for "." and "..".
 	if (r == 0 && f_pos == 0) {
+		
+		// if (debug){
+		// 	ospfs_direntry_t *a;
+		// 	a = (ospfs_direntry_t *) ospfs_inode_data(dir_oi, f_pos * OSPFS_DIRENTRY_SIZE);
+		// 	eprintk("\nospfs_dir_readdir: f_pos = %d, inode_no =%d, name =%s", f_pos,a->od_ino,a->od_name);
+		// }
+
 		ok_so_far = filldir(dirent, ".", 1, f_pos, dir_inode->i_ino, DT_DIR);
 		if (ok_so_far >= 0)
 			f_pos++;
 	}
 
 	if (r == 0 && ok_so_far >= 0 && f_pos == 1) {
+		// if (debug){
+		// 	ospfs_direntry_t *a;
+		// 	a = (ospfs_direntry_t *) ospfs_inode_data(dir_oi, f_pos * OSPFS_DIRENTRY_SIZE);
+		// 	eprintk("\nospfs_dir_readdir: f_pos = %d, inode_no =%d, name =%s", f_pos,a->od_ino,a->od_name);
+		// }
+
 		ok_so_far = filldir(dirent, "..", 2, f_pos, filp->f_dentry->d_parent->d_inode->i_ino, DT_DIR);
 		if (ok_so_far >= 0)
 			f_pos++;
@@ -452,6 +466,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 	// actual entries
 	while (r == 0 && ok_so_far >= 0 && f_pos >= 2) {
+		if (debug) eprintk("\nospfs_dir_readdir: while loop iteration f_pos(adjusted) = %d", f_pos-2);
 		ospfs_direntry_t *od;
 		ospfs_inode_t *entry_oi;
 
@@ -461,9 +476,9 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		 *
 		 * EXERCISE: Your code here */
 
-		if (f_pos >= dir_oi->oi_size/OSPFS_DIRENTRY_SIZE)
+		if (f_pos-2 >= (dir_oi->oi_size)/OSPFS_DIRENTRY_SIZE)
 		{
-			if (debug) eprintk("\nospfs_dir_readdir: terminated with f_pos=%d, dir_oi->oi_size/OSPFS_DIRENTRY_SIZE=%d\n", f_pos, dir_oi->oi_size/OSPFS_DIRENTRY_SIZE);
+			if (debug) eprintk("\nospfs_dir_readdir: terminated with f_pos(adjusted)=%d, dir_oi->oi_size/OSPFS_DIRENTRY_SIZE=%d\n", f_pos-2, dir_oi->oi_size/OSPFS_DIRENTRY_SIZE);
 			r = 1;		/* Fix me! */
 			break;		/* Fix me! */
 		}
@@ -491,11 +506,11 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 		/* EXERCISE: Your code here */
 
-		od = (ospfs_direntry_t *) ospfs_inode_data(dir_oi, f_pos * OSPFS_DIRENTRY_SIZE);
+		od = (ospfs_direntry_t *) ospfs_inode_data(dir_oi, (f_pos-2) * OSPFS_DIRENTRY_SIZE);
 
-		if(od->od_ino)
+		if(od->od_ino > 0)
 		{
-			if (debug) eprintk("ospfs_dir_readdir: f_pos = %d, inode = %d, name= %s\n", f_pos, od->od_ino, od->od_name);
+			if (debug) eprintk("\nospfs_dir_readdir: f_pos(adjusted) = %d, inode = %d, name= %s", f_pos-2, od->od_ino, od->od_name);
 			entry_oi = ospfs_inode(od->od_ino);
 			int ftype;
 			ftype = entry_oi->oi_ftype;
