@@ -92,7 +92,7 @@ static struct inode_operations ospfs_symlink_inode_ops;
 static struct dentry_operations ospfs_dentry_ops;
 static struct super_operations ospfs_superblock_ops;
 
-static int debug = 0;
+static int debug = 1;
 
 /*****************************************************************************
  * BITVECTOR OPERATIONS
@@ -352,7 +352,7 @@ ospfs_delete_dentry(struct dentry *dentry)
 static struct dentry *
 ospfs_dir_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *ignore)
 {
-	if (debug) eprintk("\nospfs_dir_lookup function called\n");
+	if (debug) eprintk("\nospfs_dir_lookup function called for %s of length %d\n", dentry->d_name.name, dentry->d_name.len);
 	// Find the OSPFS inode corresponding to 'dir'
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	struct inode *entry_inode = NULL;
@@ -1476,19 +1476,22 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 	if (debug) eprintk("\nospfs_link function called\n");
 	//convert linux dentry to ospfs_inodes
 
-	int name_len = src_dentry->d_name.len;
+	int name_len = dst_dentry->d_name.len;
 
 	ospfs_inode_t *dir_inode = ospfs_inode(dir->i_ino);
 	ospfs_inode_t *src_inode = ospfs_inode(src_dentry->d_inode->i_ino);
 
 
 
-	if (name_len >= OSPFS_MAXNAMELEN)
+	if (name_len > OSPFS_MAXNAMELEN)
 		return -ENAMETOOLONG;
 	
 	//if file exists in the dir already
 	if (find_direntry(dir_inode, dst_dentry->d_name.name, name_len))
+	{
+		if (debug) eprintk("\nospfs_link: file %s of length %d exists\n",dst_dentry->d_name.name, name_len);
 		return -EEXIST;
+	}
 
 	//allocate space for dst directory in dir
 
