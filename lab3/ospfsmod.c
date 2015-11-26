@@ -92,7 +92,7 @@ static struct inode_operations ospfs_symlink_inode_ops;
 static struct dentry_operations ospfs_dentry_ops;
 static struct super_operations ospfs_superblock_ops;
 
-static int debug = 1;
+static int debug = 0;
 
 /*****************************************************************************
  * BITVECTOR OPERATIONS
@@ -1460,17 +1460,13 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 
 	if (debug) eprintk("\nospfs_link function called\n");
 	//convert linux dentry to ospfs_inodes
-	ospfs_inode_t *dir_inode;
-	ospfs_direntry_t *new_od;
-	ospfs_inode_t *src_inode;
-	int name_len;
+
+	int name_len = src_dentry->d_name.len;
+
+	ospfs_inode_t *dir_inode = ospfs_inode(dir->i_ino);
+	ospfs_inode_t *src_inode = ospfs_inode(src_dentry->d_inode->i_ino);
 
 
-	dir_inode = ospfs_inode(dir->i_ino);
-	src_inode = ospfs_inode(src_dentry->d_inode->i_ino);
-
-	
-	name_len = src_dentry->d_name.len;
 
 	if (name_len >= OSPFS_MAXNAMELEN)
 		return -ENAMETOOLONG;
@@ -1481,18 +1477,18 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 
 	//allocate space for dst directory in dir
 
-	new_od=create_blank_direntry(dir_inode);
+	ospfs_direntry_t *new_entry=create_blank_direntry(dir_inode);
 
 	//problem with creating new direntry
-	if (IS_ERR(new_od))
-		return PTR_ERR(new_od);
+	if (IS_ERR(new_entry))
+		return PTR_ERR(new_entry);
 
 	//set the inode ino, copy the name, increase the number of links
-	new_od->od_ino=src_dentry->d_inode->i_ino;
-	dst_dentry->d_inode->i_ino = src_dentry->d_inode->i_ino;
+	new_entry->od_ino=src_dentry->d_inode->i_ino;
+	//dst_dentry->d_inode->i_ino = src_dentry->d_inode->i_ino;
 
-	memcpy(new_od->od_name,dst_dentry->d_name.name,name_len);
-	new_od->od_name[name_len]='\0';
+	memcpy(new_entry->od_name,dst_dentry->d_name.name,name_len);
+	new_entry->od_name[name_len]='\0';
 
 	src_inode->oi_nlink++; 
 	
@@ -1539,9 +1535,10 @@ static int find_free_inode() {
 
 	for (i=0;i<ospfs_super->os_ninodes;i++) {
 		cur_inode = ospfs_inode(i);
+		if (!cur_inode) continue;
 
 		//if inode has no hard links then it can be used
-		if (!cur_inode->oi_nlink) {
+		if (cur_inode->oi_nlink==0) {
 			return i;
 		}
 	}
@@ -1573,6 +1570,7 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	
 	entry_ino = find_free_inode(); //assign a free inode number to the entry
 	//initialize the inode for the file
+	if (entry_ino == -ENOSPC) return -ENOSPC;
 	
 	file_oi= ospfs_inode(entry_ino);
 	file_oi->oi_size = 0;
@@ -1580,19 +1578,23 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	file_oi->oi_nlink=1;
 	file_oi->oi_mode=mode;
 
-	//clear bitmap
+
+	if(find_direntry(dir_oi, dentry->d_name.name, name_len))
+		return -EEXIST;
+	
 
 	//initialize the new directory entry
 	//we need to implement this (create new directory given the directory number)
 
 	new_entry = create_blank_direntry(dir_oi);
+
 	if (IS_ERR(new_entry))
 		return PTR_ERR(new_entry);
 
 	//copy the entry number and set the name
-	if (name_len> OSPFS_MAXNAMELEN) {
+	if (name_len>= OSPFS_MAXNAMELEN)
 		return -ENAMETOOLONG;
-	}
+
 
 	new_entry->od_ino=entry_ino;
 	memcpy(new_entry->od_name, dentry->d_name.name, name_len);
@@ -1643,7 +1645,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino;
 	uint32_t block_no;
-	int name_len;
+
 
 	
 	
@@ -1652,29 +1654,36 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 
 	block_no = 0;
 	entry_ino = 0;
-	name_len = dentry->d_name.len;
+	int sym_name_len = strlen(symname);
 	
 	
 	//assign a free inode number to the entry
 	entry_ino = find_free_inode(); 
+	if (entry_ino == -ENOSPC) return -ENOSPC;
 
 
 	//initialize the symlink inode for the file
-	file_oi = (ospfs_symlink_inode_t *)ospfs_inode(entry_ino);
+	file_oi = ospfs_inode(entry_ino);
 	file_oi->oi_size = 0;
 	file_oi->oi_ftype = OSPFS_FTYPE_SYMLINK;
 	file_oi->oi_nlink = 1;
-	file_oi->oi_size = name_len;
-	file_oi->oi_symlink[name_len] = '\0';
+	file_oi->oi_size = sym_name_len;
+	memcpy(file_oi->oi_symlink, symname, sym_name_len);
+	file_oi->oi_symlink[sym_name_len] = '\0';
 
 	new_entry = create_blank_direntry(dir_oi);
 
-	if (name_len > OSPFS_MAXSYMLINKLEN) {
+	if (sym_name_len > OSPFS_MAXSYMLINKLEN) {
 		return -ENAMETOOLONG;
 	}
 
-	//copy over the directory filename
-	memcpy(file_oi->oi_symlink, dentry->d_name.name, name_len);
+	//copy over the directory information and set the inode
+	new_entry->od_ino = entry_ino;
+
+	int dentry_name_len = dentry->d_name.len;
+	memcpy(new_entry->od_name, dentry->d_name.name,dentry_name_len);
+	new_entry->od_name[dentry_name_len]='\0';
+
 
 
 
@@ -1728,6 +1737,7 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 	// 	if(current->uid==0) {
 	// 		nd_set_link(nd, oi->oi_symlink + 5);
 	// 		eprintk("follow link filename: %s\n", oi->oi_symlink + i + 1);	
+		
 	// 	}
 	// 	else {
 	// 		nd_set_link(nd,oi->oi_symlink + i + 1);
