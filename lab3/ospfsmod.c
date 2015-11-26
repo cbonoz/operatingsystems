@@ -92,7 +92,7 @@ static struct inode_operations ospfs_symlink_inode_ops;
 static struct dentry_operations ospfs_dentry_ops;
 static struct super_operations ospfs_superblock_ops;
 
-static int debug = 1;
+static int debug = 0;
 
 /*****************************************************************************
  * BITVECTOR OPERATIONS
@@ -587,7 +587,7 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 		oi->oi_size=0;
 
 	}
-	if (debug) eprintk("\n%s: has %d links left", dentry->d_name.name, oi->oi_nlink);
+	if (debug) eprintk("\n%s: has %d links left\n", dentry->d_name.name, oi->oi_nlink);
 
 	return 0;
 }
