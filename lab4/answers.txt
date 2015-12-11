@@ -37,4 +37,7 @@ Email: yuanchen@ucla.edu
 
 # Add any other information you'd like us to know below this line.
 
-ssh http://www.seasnet.ucla.edu/lnxsrv
+
+
+Connect to SEAS linux server:
+ssh username@lnxsrv.seas.ucla.edu	

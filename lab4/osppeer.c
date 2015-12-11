@@ -23,6 +23,10 @@
 #include "md5.h"
 #include "osp2p.h"
 
+//added
+#include <sys/wait.h>
+
+
 static struct in_addr listen_addr;	// Define listening endpoint
 static int listen_port;
 
@@ -776,45 +780,43 @@ int main(int argc, char *argv[])
 	TODO: MAKE THIS STUFF PARALLEL
 	*/
 
-	int childpid=0, status=0;
+	// int childpid=0, status=0;
 
 
-	for (; argc > 1; argc--, argv++) {
-		if (!(childpid = fork())) {
-			//child process
-			if ((t = start_download(tracker_task, argv[1]))) {
-				task_download(t, tracker_task);
-			}
-		}
-	}
+	// for (; argc > 1; argc--, argv++) {
+	// 	if (!(childpid = fork())) {
+	// 		//child process
+	// 		if ((t = start_download(tracker_task, argv[1]))) {
+	// 			task_download(t, tracker_task);
+	// 			exit(0);
+	// 		}
+	// 	}
+	// }
 
-	waitpid(-1, &status, 0); //wait for threads to sync
+	// //waitpid(-1, &status, 0); //wait for threads to sync
 
-
-	//this is also parallelizable
-	while ((t = task_listen(listen_task))) {
-		if (!(childpid=fork())) {
-			task_upload(t);
-		}
+	//accept connections to other peers
+	// //this is also parallelizable
+	// while ((t = task_listen(listen_task))) {
+	// 	if (!(childpid=fork())) {
+	// 		task_upload(t);
+	// 		exit(0);
+	// 	}
 		
-	}
-
-	waitpid(-1, &status, 0); //wait for threads to sync
+	// }
 
 
-	// Then accept connections from other peers and upload files to them!
+	//original version (serial upload and download)
 
-	//this is also parallelizable
+	for (; argc > 1; argc--, argv++)
+		if ((t = start_download(tracker_task, argv[1])))
+			task_download(t, tracker_task);
 
-	// while ((t = task_listen(listen_task)))
-	// 	task_upload(t);
+	while ((t = task_listen(listen_task)))
+		task_upload(t);
 
 
-	// for (; argc > 1; argc--, argv++)
-	// 	if ((t = start_download(tracker_task, argv[1])))
-	// 		task_download(t, tracker_task);
-
-	// Then accept connections from other peers and upload files to them!
+	
 
 	return 0;
 }
