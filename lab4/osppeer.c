@@ -775,15 +775,46 @@ int main(int argc, char *argv[])
 	this is the serial part of the downloader
 	TODO: MAKE THIS STUFF PARALLEL
 	*/
-	for (; argc > 1; argc--, argv++)
-		if ((t = start_download(tracker_task, argv[1])))
-			task_download(t, tracker_task);
+
+	int childpid=0, status=0;
+
+
+	for (; argc > 1; argc--, argv++) {
+		if (!(childpid = fork())) {
+			//child process
+			if ((t = start_download(tracker_task, argv[1]))) {
+				task_download(t, tracker_task);
+			}
+		}
+	}
+
+	waitpid(-1, &status, 0); //wait for threads to sync
+
+
+	//this is also parallelizable
+	while ((t = task_listen(listen_task))) {
+		if (!(childpid=fork())) {
+			task_upload(t);
+		}
+		
+	}
+
+	waitpid(-1, &status, 0); //wait for threads to sync
+
 
 	// Then accept connections from other peers and upload files to them!
 
 	//this is also parallelizable
-	while ((t = task_listen(listen_task)))
-		task_upload(t);
+
+	// while ((t = task_listen(listen_task)))
+	// 	task_upload(t);
+
+
+	// for (; argc > 1; argc--, argv++)
+	// 	if ((t = start_download(tracker_task, argv[1])))
+	// 		task_download(t, tracker_task);
+
+	// Then accept connections from other peers and upload files to them!
 
 	return 0;
 }
