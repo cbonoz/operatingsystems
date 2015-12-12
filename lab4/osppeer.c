@@ -39,6 +39,7 @@ static int listen_port;
 
 #define TASKBUFSIZ	4096	// Size of task_t::buf
 #define FILENAMESIZ	256	// Size of task_t::filename
+#define MAXFILESIZ (20 * 1024 * 1024);
 
 typedef enum tasktype {		// Which type of connection is this?
 	TASK_TRACKER,		// => Tracker connection
@@ -582,6 +583,8 @@ static void task_download(task_t *t, task_t *tracker_task)
 
 	// Read the file into the task buffer from the peer,
 	// and write it from the task buffer onto disk.
+
+
 	while (1) {
 		int ret = read_to_taskbuf(t->peer_fd, t);
 		if (ret == TBUF_ERROR) {
@@ -591,9 +594,15 @@ static void task_download(task_t *t, task_t *tracker_task)
 			/* End of file */
 			break;
 
+		//updates the write count (total_written)
 		ret = write_from_taskbuf(t->disk_fd, t);
 		if (ret == TBUF_ERROR) {
 			error("* Disk write error");
+			goto try_again;
+		}
+		//will need to check that the file is not too big
+		if (t->total_written > MAXFILESIZ) {
+			error("* File size too large - exceeded limit of %d bytes", MAXFILESIZ);
 			goto try_again;
 		}
 	}
@@ -780,40 +789,41 @@ int main(int argc, char *argv[])
 	TODO: MAKE THIS STUFF PARALLEL
 	*/
 
-	// int childpid=0, status=0;
+	int childpid=0, status=0;
 
 
-	// for (; argc > 1; argc--, argv++) {
-	// 	if (!(childpid = fork())) {
-	// 		//child process
-	// 		if ((t = start_download(tracker_task, argv[1]))) {
-	// 			task_download(t, tracker_task);
-	// 			exit(0);
-	// 		}
-	// 	}
-	// }
+	for (; argc > 1; argc--, argv++) {
+		if (!(childpid = fork())) {
+			//child process
+			if ((t = start_download(tracker_task, argv[1]))) {
+				task_download(t, tracker_task);
+				exit(0);
+			}
+		}
+	}
 
-	// //waitpid(-1, &status, 0); //wait for threads to sync
-
-	//accept connections to other peers
-	// //this is also parallelizable
-	// while ((t = task_listen(listen_task))) {
-	// 	if (!(childpid=fork())) {
-	// 		task_upload(t);
-	// 		exit(0);
-	// 	}
+	for (; argc > 1; argc--, argv++) {
+		waitpid(-1, &status, 0); //wait for threads to sync
+	}
+	
+	//this is also parallelizable
+	while ((t = task_listen(listen_task))) {
+		if (!(childpid=fork())) {
+			task_upload(t);
+			exit(0);
+		}
 		
-	// }
+	}
+	waitpid(-1, &status, 0);ß
 
+	// //original version (serial upload and download)
 
-	//original version (serial upload and download)
+	// for (; argc > 1; argc--, argv++)
+	// 	if ((t = start_download(tracker_task, argv[1])))
+	// 		task_download(t, tracker_task);
 
-	for (; argc > 1; argc--, argv++)
-		if ((t = start_download(tracker_task, argv[1])))
-			task_download(t, tracker_task);
-
-	while ((t = task_listen(listen_task)))
-		task_upload(t);
+	// while ((t = task_listen(listen_task)))
+	// 	task_upload(t);
 
 
 	
