@@ -37,9 +37,9 @@ static int listen_port;
  * a bounded buffer that simplifies reading from and writing to peers.
  */
 
-#define TASKBUFSIZ	4096	// Size of task_t::buf
+#define TASKBUFSIZ	(4096*20)	// Size of task_t::buf
 #define FILENAMESIZ	256	// Size of task_t::filename
-#define MAXFILESIZ (20 * 1024 * 1024);
+#define MAXFILESIZ (20 * 1024 * 1024)
 
 typedef enum tasktype {		// Which type of connection is this?
 	TASK_TRACKER,		// => Tracker connection
@@ -472,20 +472,11 @@ task_t *start_download(task_t *tracker_task, const char *filename)
 	peer_t *p;
 	size_t messagepos;
 	assert(tracker_task->type == TASK_TRACKER);
-	int f_length = strlen(filename);
 
-	
-	/*
-	this function initiates the download task
-	TODO: check that file is valid to be served before allowing request
-
-	*/
-
-	if (f_length > FILENAMESIZ) {
+	if (strlen(filename) >= FILENAMESIZ) {
 		error("Filename %s is too long, please use a filename that is less than %d characters", filename, FILENAMESIZ);
 		goto exit;
 	}
-
 
 	message("* Finding peers for '%s'\n", filename);
 
@@ -554,13 +545,17 @@ static void task_download(task_t *t, task_t *tracker_task)
 
 	// Open disk file for the result.
 	// If the filename already exists, save the file in a name like
-	// "foo.txt~1~".  However, if there are 50 local files, don't download
+	// "foo.txt~1~". However, if there are 50 local files, don't download
 	// at all.
 	for (i = 0; i < 50; i++) {
 		if (i == 0) {
-			int t_len = strlen(t->filename);
-			memcpy(t->disk_filename, t->filename, t_len+1);
-			// strcpy(t->disk_filename, t->filename);
+			
+			if (strlen(t->filename) >= FILENAMESIZ) {
+				error("Filename %s is too long, please use a filename that is less than %d characters", t->filename, FILENAMESIZ);
+				goto try_again;
+			}
+
+			strcpy(t->disk_filename, t->filename);
 		}
 		else
 			sprintf(t->disk_filename, "%s~%d~", t->filename, i);
@@ -590,10 +585,10 @@ static void task_download(task_t *t, task_t *tracker_task)
 		if (ret == TBUF_ERROR) {
 			error("* Peer read error");
 			goto try_again;
-		} else if (ret == TBUF_END && t->head == t->tail)
+		} else if (ret == TBUF_END && t->head == t->tail) {
 			/* End of file */
 			break;
-
+		}
 		//updates the write count (total_written)
 		ret = write_from_taskbuf(t->disk_fd, t);
 		if (ret == TBUF_ERROR) {
@@ -637,6 +632,7 @@ static void task_download(task_t *t, task_t *tracker_task)
 //	Returns a TASK_UPLOAD task for the new connection.
 static task_t *task_listen(task_t *listen_task)
 {
+	printf("\nListening for upload task");
 	struct sockaddr_in peer_addr;
 	socklen_t peer_addrlen = sizeof(peer_addr);
 	int fd;
@@ -678,12 +674,34 @@ static void task_upload(task_t *t)
 			break;
 	}
 
+
 	assert(t->head == 0);
+
+	//difference of pointers also includes spaces
+	if ((strstr(t->buf,"OSP2P") - strstr(t->buf, "GET")) > FILENAMESIZ) {
+		error("* Filename is too long, please use a filename that is less than %s characters", FILENAMESIZ);
+		goto exit;
+	}
+
 	if (osp2p_snscanf(t->buf, t->tail, "GET %s OSP2P\n", t->filename) < 0) {
 		error("* Odd request %.*s\n", t->tail, t->buf);
 		goto exit;
 	}
 	t->head = t->tail = 0;
+
+
+	if (strlen(t->filename) >= FILENAMESIZ) {
+		error("* Filename %s is too long, please use a filename that is less than %d characters", t->filename, FILENAMESIZ);
+		goto exit;
+	}
+
+	//STRSTR
+	//Returns a pointer to the first occurrence of str2 in str1, or a null pointer if str2 is not part of str1. (strstr(str1, str2))
+	if (strstr(t->filename, "/") != NULL) {
+		error("* No '/' characters allowed in filename, can only serve files from peer's current directory");
+		goto exit;
+	}
+	
 
 	t->disk_fd = open(t->filename, O_RDONLY);
 	if (t->disk_fd == -1) {
@@ -783,18 +801,11 @@ int main(int argc, char *argv[])
 
 	// First, download files named on command line.
 	
-
-	/*
-	this is the serial part of the downloader
-	TODO: MAKE THIS STUFF PARALLEL
-	*/
-
-	int childpid=0, status=0;
-
+	int childpid=0, status=0, wpid;
 
 	for (; argc > 1; argc--, argv++) {
 		if (!(childpid = fork())) {
-			//child process
+			//child processß
 			if ((t = start_download(tracker_task, argv[1]))) {
 				task_download(t, tracker_task);
 				exit(0);
@@ -802,19 +813,20 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	for (; argc > 1; argc--, argv++) {
-		waitpid(-1, &status, 0); //wait for threads to sync
-	}
-	
+	//wait for threads to sync
+	printf("\nWaiting for threads to sync\n");
+	while ((wpid = wait(&status)) > 0);
+	printf("\nDone with sync\n");
 	//this is also parallelizable
+	int ct=1;
 	while ((t = task_listen(listen_task))) {
+		//printf("\nuploading %d", ct++);
 		if (!(childpid=fork())) {
 			task_upload(t);
 			exit(0);
 		}
 		
 	}
-	waitpid(-1, &status, 0);ß
 
 	// //original version (serial upload and download)
 

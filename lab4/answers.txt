@@ -25,20 +25,21 @@ Email: yuanchen@ucla.edu
 # EXERCISE 1: What method you used to make your peer download and upload
 #    files in parallel?  (~1-3 sentences)
 
-We mirrored the forking implementation in lab 1 to enable parallel downloads and uploads.
+We mirrored the forking implementation in lab 1 to enable parallel downloads and uploads of files.
 
 
 # EXERCISE 2A: What conditions did you find and fix that would have
 #    triggered a buffer overrun bug?  (~1-3 sentences each)
 
-1. Fixed buffer overflow that could occur if the user's filename size is greater than the size of our filename buffer (returns an error if the requested filename is too long on the command line).
-2. Added a check for the t->filename not to exceed the size of the disk filename size
-3. 
+1. Fixed buffer overflow that could occur if the user's filename size is greater than the size of our filename buffer (returns an error if the requested filename is too long on the command line) - replaced strcpy with strncpy for copy check safety (where appropriate)
+2. Added a check for the t->filename not to exceed the size of the disk/task filename size
+3. Expanded task buffer to support more peers (in case of overflow of peers, such as in run-popular mode)
 
 # EXERCISE 2B: What other robustness problems did you fix?  (~1-3 sentences
 #    each)
 
 1. Capped the file download size that could be initiated (limited to 2ß0MB) to prevent attackers from loading the disk with single requests. If you want larger files than this, can do partial file downloads that still fit within this cap.
+2. If the user makes a download request that exceeds the size of the task buffer, this is also prevented.
 
 
 # Add any other information you'd like us to know below this line.
