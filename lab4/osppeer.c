@@ -36,8 +36,8 @@ static int listen_port;
  * Holds all information relevant for a peer or tracker connection, including
  * a bounded buffer that simplifies reading from and writing to peers.
  */
-
-#define TASKBUFSIZ	12000//(4096*20)	// Size of task_t::buf
+//increased size of task buffer to accomodate additional peer requests
+#define TASKBUFSIZ	(4096*20)	// Size of task_t::buf
 #define FILENAMESIZ	256	// Size of task_t::filename
 #define MB (1024*1024)
 #define MAXFILESIZ (20*MB) //20MB
@@ -829,44 +829,32 @@ int main(int argc, char *argv[])
 		{
             pid_t child;
             if ((child = fork()) < 0) {
-                error("Forking a new process for downloading failed.\n");
+                error("Fork failed.\n");
                 continue;
-            }
-
-            // Inside child
-            else if (child == 0) {
+            } else if (child == 0) { //childn
                 task_download(t, tracker_task);
                 exit(0);
-            }
-            
-            // Inside parent
-            else {
+            } else { //parent
                 task_free(t);
             }
         }
 	}
-    // waitpid(pid_t pid, int* status, int options)
-    // pid == -1 indicates wait for all children
+
+
     while (waitpid(-1, NULL, 0) > 0) {
         continue;
     }
 
-	// Then accept connections from other peers and upload files to them!
+    //now upload
 	while ((t = task_listen(listen_task))) {
         pid_t child; 
         if ((child = fork()) < 0) {
-            error("Forking a new process for uploading failed.\n");
+            error("Fork failed.\n");
             continue;
-        }
-
-        // Inside child
-        else if (child == 0) {
+        } else if (child == 0) { //child
             task_upload(t);
             exit(0);
-        }
-
-        // Inside parent
-        else {
+        } else { //parent
             task_free(t);
         }
     }
