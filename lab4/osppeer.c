@@ -830,6 +830,10 @@ int main(int argc, char *argv[])
 		
 	}
 
+	printf("\nWaiting for child threads to finish...");
+	while ((wpid = wait(&status)) > 0);
+
+
 	// //original version (serial upload and download)
 
 	// for (; argc > 1; argc--, argv++)
@@ -838,6 +842,7 @@ int main(int argc, char *argv[])
 
 	// while ((t = task_listen(listen_task)))
 	// 	task_upload(t);
+
 
 
 	
