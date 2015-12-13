@@ -40,10 +40,84 @@ We mirrored the forking implementation in lab 1 to enable parallel downloads and
 
 1. Capped the file download size that could be initiated (limited to 2ß0MB) to prevent attackers from loading the disk with single requests. If you want larger files than this, can do partial file downloads that still fit within this cap.
 2. If the user makes a download request that exceeds the size of the task buffer, this is also prevented.
+3. See notes below for more relevant information
 
 
 # Add any other information you'd like us to know below this line.
 
+When all the active upload tasks have completed (or invalid tasks have been removed), then system will idle and state "Listening for next upload task." This is nromal behavior we have defined.
+
+For make run-bad, tasks which involved files that are too large will get removed from the active tasks list (so they aren't rerun uneccessarily)
+
+Occassionally the peers will not connect (this is a tracker-based issue.) If you rerun make-popular for example and the tracker side works correctly with no refusing connections, the output will work as expected - without being flooded.
+
+Set the max file size to 20MB to prevent run-bad flooding - larger files should be done piecewise.
+
+
+
+
+Example outputs below
+
+====
+
+
+[chris@lnxsrv01 ~/Documents/lab4]$ make run-popular
++ mkdir test
++ ./osppeer -dtest -t13000 cat1.jpg cat2.jpg cat3.jpg
+* Tracker's greeting:
+200-Welcome to the OSP2P tracker!
+200-You will be timed out after 600 seconds of inactivity.
+200 Try 'HELP' to get a list of commands.
+* Listening on port 11157
+* Tracker's response to our IP address registration:
+220-This tracker is set up to ignore external peers,
+220-so that you don't have to worry about problems caused by other students.
+220 The address registration has been ignored.
+* Registering our files with tracker
+* Finding peers for 'cat1.jpg'
+* Connecting to 127.0.0.1:11126 to download 'cat1.jpg'
+* Finding peers for 'cat2.jpg'
+* Saving result to 'cat1.jpg'
+* Downloaded 'cat1.jpg' was 14076 bytes long
+* Connecting to 127.0.0.1:11127 to download 'cat2.jpg'
+* Finding peers for 'cat3.jpg'
+* Saving result to 'cat2.jpg'
+* Downloaded 'cat2.jpg' was 9531 bytes long
+* Connecting to 127.0.0.1:11125 to download 'cat3.jpg'
+* Saving result to 'cat3.jpg'
+* Downloaded 'cat3.jpg' was 106110 bytes long
+
+[chris@lnxsrv01 ~/Documents/lab4]$ make clean; make run-bad
+rm -f *.o *~ osptracker osptracker.cc osppeer
++ cc osppeer.c
++ cc md5.c
++ cc writescan.c
++ ld osppeer
++ mkdir test
++ ./osppeer -dtest -t13001 cat1.jpg cat2.jpg cat3.jpg
+* Tracker's greeting:
+200-Welcome to the OSP2P tracker!
+200-You will be timed out after 600 seconds of inactivity.
+200 Try 'HELP' to get a list of commands.
+* Listening on port 11157
+* Tracker's response to our IP address registration:
+220-This tracker is set up to ignore external peers,
+220-so that you don't have to worry about problems caused by other students.
+220 The address registration has been ignored.
+* Registering our files with tracker
+* Finding peers for 'cat1.jpg'
+* Finding peers for 'cat2.jpg'
+* Connecting to 127.0.0.1:11130 to download 'cat1.jpg'
+* Saving result to 'cat1.jpg'
+* Finding peers for 'cat3.jpg'
+* Connecting to 127.0.0.1:11128 to download 'cat2.jpg'
+* Saving result to 'cat2.jpg'
+* Connecting to 127.0.0.1:11128 to download 'cat3.jpg'
+* Saving result to 'cat3.jpg'
+* Canceled Task for 'cat2.jpg': File size too long (> 20 MB): Address already in use
+* Canceled Task for 'cat1.jpg': File size too long (> 20 MB): Address already in use
+* Canceled Task for 'cat3.jpg': File size too long (> 20 MB): Address already in use
+* Listening for next upload task
 
 
 Connect to SEAS linux server:

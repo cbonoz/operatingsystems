@@ -37,9 +37,10 @@ static int listen_port;
  * a bounded buffer that simplifies reading from and writing to peers.
  */
 
-#define TASKBUFSIZ	(4096*20)	// Size of task_t::buf
+#define TASKBUFSIZ	12000//(4096*20)	// Size of task_t::buf
 #define FILENAMESIZ	256	// Size of task_t::filename
-#define MAXFILESIZ (20 * 1024 * 1024)
+#define MB (1024*1024)
+#define MAXFILESIZ (20*MB) //20MB
 
 typedef enum tasktype {		// Which type of connection is this?
 	TASK_TRACKER,		// => Tracker connection
@@ -492,7 +493,10 @@ task_t *start_download(task_t *tracker_task, const char *filename)
 		error("* Error while allocating task");
 		goto exit;
 	}
-	strcpy(t->filename, filename);
+
+	strncpy(t->filename, filename, FILENAMESIZ - 1);
+	//ensure null termination
+	 t->filename[FILENAMESIZ - 1] = '\0';
 
 	// add peers
 	s1 = tracker_task->buf;
@@ -536,7 +540,11 @@ static void task_download(task_t *t, task_t *tracker_task)
 	message("* Connecting to %s:%d to download '%s'\n",
 		inet_ntoa(t->peer_list->addr), t->peer_list->port,
 		t->filename);
+
+	
+	
 	t->peer_fd = open_socket(t->peer_list->addr, t->peer_list->port);
+
 	if (t->peer_fd == -1) {
 		error("* Cannot connect to peer: %s\n", strerror(errno));
 		goto try_again;
@@ -549,13 +557,11 @@ static void task_download(task_t *t, task_t *tracker_task)
 	// at all.
 	for (i = 0; i < 50; i++) {
 		if (i == 0) {
-			
-			if (strlen(t->filename) >= FILENAMESIZ) {
-				error("Filename %s is too long, please use a filename that is less than %d characters", t->filename, FILENAMESIZ);
-				goto try_again;
-			}
 
-			strcpy(t->disk_filename, t->filename);
+			//make sure filename is alllowable length before starting
+			strncpy(t->disk_filename, t->filename, FILENAMESIZ - 1); 
+			//ensure null termination
+			t->disk_filename[FILENAMESIZ - 1] = '\0';
 		}
 		else
 			sprintf(t->disk_filename, "%s~%d~", t->filename, i);
@@ -597,8 +603,10 @@ static void task_download(task_t *t, task_t *tracker_task)
 		}
 		//will need to check that the file is not too big
 		if (t->total_written > MAXFILESIZ) {
-			error("* File size too large - exceeded limit of %d bytes", MAXFILESIZ);
-			goto try_again;
+			unlink(t->disk_filename);
+			error("* Canceled Task for '%s': File size too long (> %d MB)", t->disk_filename,MAXFILESIZ/MB);
+			task_free(t);
+			return;
 		}
 	}
 
@@ -632,7 +640,7 @@ static void task_download(task_t *t, task_t *tracker_task)
 //	Returns a TASK_UPLOAD task for the new connection.
 static task_t *task_listen(task_t *listen_task)
 {
-	printf("\nListening for upload task");
+	message("* Listening for next upload task");
 	struct sockaddr_in peer_addr;
 	socklen_t peer_addrlen = sizeof(peer_addr);
 	int fd;
@@ -651,6 +659,10 @@ static task_t *task_listen(task_t *listen_task)
 		inet_ntoa(peer_addr.sin_addr), ntohs(peer_addr.sin_port));
 
 	t = task_new(TASK_UPLOAD);
+
+	//make sure task is valid
+	if (!t) return NULL;
+
 	t->peer_fd = fd;
 	return t;
 }
@@ -676,12 +688,18 @@ static void task_upload(task_t *t)
 
 
 	assert(t->head == 0);
+	//check t->tail length
+	t->tail = t->tail >= FILENAMESIZ ? FILENAMESIZ - 1 : t->tail;
 
-	//difference of pointers also includes spaces
-	if ((strstr(t->buf,"OSP2P") - strstr(t->buf, "GET")) > FILENAMESIZ) {
-		error("* Filename is too long, please use a filename that is less than %s characters", FILENAMESIZ);
-		goto exit;
-	}
+	//difference of pointers also includes spaces (3 is length of "GET" that needs to be removed)
+	// int f_length = (strstr(t->buf,"OSP2P") - strstr(t->buf, "GET") - 3);
+	
+	// if (f_length > FILENAMESIZ) {
+	// 	error("* Filename is too long (%d), please use a filename that is less than %s characters",f_length, FILENAMESIZ);
+	// 	goto exit;
+	// }
+
+
 
 	if (osp2p_snscanf(t->buf, t->tail, "GET %s OSP2P\n", t->filename) < 0) {
 		error("* Odd request %.*s\n", t->tail, t->buf);
@@ -689,14 +707,17 @@ static void task_upload(task_t *t)
 	}
 	t->head = t->tail = 0;
 
+	
 
-	if (strlen(t->filename) >= FILENAMESIZ) {
-		error("* Filename %s is too long, please use a filename that is less than %d characters", t->filename, FILENAMESIZ);
-		goto exit;
-	}
+	// if (strlen(t->filename) >= FILENAMESIZ) {
+	// 	error("* Filename %s is too long, please use a filename that is less than %d characters", t->filename, FILENAMESIZ);
+	// 	goto exit;
+	// }
 
-	//STRSTR
-	//Returns a pointer to the first occurrence of str2 in str1, or a null pointer if str2 is not part of str1. (strstr(str1, str2))
+	
+	//strstr returns a pointer to the first occurrence of str2 in str1, or a null pointer if str2 is not part of str1. (strstr(str1, str2))
+
+	//make sure no directory changes
 	if (strstr(t->filename, "/") != NULL) {
 		error("* No '/' characters allowed in filename, can only serve files from peer's current directory");
 		goto exit;
@@ -799,53 +820,133 @@ int main(int argc, char *argv[])
 	listen_task = start_listen();
 	register_files(tracker_task, myalias);
 
-	// First, download files named on command line.
-	
-	int childpid=0, status=0, wpid;
+	//count is number of child processes spawned
+	int status, childpid, count=0;
 
-	for (; argc > 1; argc--, argv++) {
-		if (!(childpid = fork())) {
-			//child processß
-			if ((t = start_download(tracker_task, argv[1]))) {
-				task_download(t, tracker_task);
-				
-			}
-			exit(0);
-		}
+	for (; argc > 1; argc--, argv++)
+	{
+		if ((t = start_download(tracker_task, argv[1]))) 
+		{
+            pid_t child;
+            if ((child = fork()) < 0) {
+                error("Forking a new process for downloading failed.\n");
+                continue;
+            }
+
+            // Inside child
+            else if (child == 0) {
+                task_download(t, tracker_task);
+                exit(0);
+            }
+            
+            // Inside parent
+            else {
+                task_free(t);
+            }
+        }
 	}
+    // waitpid(pid_t pid, int* status, int options)
+    // pid == -1 indicates wait for all children
+    while (waitpid(-1, NULL, 0) > 0) {
+        continue;
+    }
 
-	//wait for threads to sync
-	printf("\nWaiting for threads to sync\n");
-	while ((wpid = wait(&status)) > 0);
-	printf("\nDone with sync\n");
-	//this is also parallelizable
-	int ct=1;
+	// Then accept connections from other peers and upload files to them!
 	while ((t = task_listen(listen_task))) {
-		//printf("\nuploading %d", ct++);
-		if (!(childpid=fork())) {
-			task_upload(t);
-			
-		}
-		exit(0);
-		
-	}
+        pid_t child; 
+        if ((child = fork()) < 0) {
+            error("Forking a new process for uploading failed.\n");
+            continue;
+        }
 
-	printf("\nWaiting for child threads to finish...");
-	while ((wpid = wait(&status)) > 0);
+        // Inside child
+        else if (child == 0) {
+            task_upload(t);
+            exit(0);
+        }
+
+        // Inside parent
+        else {
+            task_free(t);
+        }
+    }
+
+    while (waitpid(-1, NULL, 0) > 0) {
+        continue;
+    }
 
 
-	// //original version (serial upload and download)
 
-	// for (; argc > 1; argc--, argv++)
-	// 	if ((t = start_download(tracker_task, argv[1])))
-	// 		task_download(t, tracker_task);
+	// //First, download files named on command line.
+	// for (; argc > 1; argc--, argv++){
+	// 	childpid = fork();
+	// 	if (childpid == 0){
+	
+	// 		if ((t = start_download(tracker_task, argv[1]))){
+	// 			task_download(t, tracker_task);
+	// 		}
+	
+	// 		exit(0);
+	// 	}
+	// 	count++;
+	// }
+	
+	// //wait for download to finish	
+	// for(;count>0;count--)
+	// {
+	// 	if (waitpid(-1, &status, 0) == -1)
+	// 		perror("* Error while waiting for child process to finish downloading");
 
-	// while ((t = task_listen(listen_task)))
-	// 	task_upload(t);
-
-
-
+	// }
 	
 
+
+	// //now upload
+	// while ((t = task_listen(listen_task)))
+	// {
+	// 	if(!(childpid = fork()))
+	// 	{
+	// 		task_upload(t);
+	// 		//implicit exit
+	// 	}
+	// }
+	
 	return 0;
 }
+
+// OLD
+
+	
+	// pid_t cpid;
+
+	// //printf("\nMain pid: %d", getpid());
+
+ //    for (; argc > 1; argc--, argv++) {
+
+ //    	if ((t = start_download(tracker_task, argv[1]))) {
+	//         cpid = fork();
+
+	    
+	//         if (cpid == -1) {
+	//             error("Error forking\n");
+	//         } else if (cpid == 0) { //child process
+	        	
+	//         	task_download(t, tracker_task);
+	            
+	//             exit(0);
+	//         }
+	//     }
+ //    }
+    
+
+ //    //now upload
+	// while ((t = task_listen(listen_task))) {
+	// 	cpid = fork();
+
+	// 	if (cpid == -1) {
+	// 		error("Error forking\n");
+	// 	} else if (cpid == 0) { //child process
+	// 		task_upload(t);
+	// 		exit(0);
+	// 	}
+	// }
