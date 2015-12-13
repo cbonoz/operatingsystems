@@ -808,8 +808,9 @@ int main(int argc, char *argv[])
 			//child processß
 			if ((t = start_download(tracker_task, argv[1]))) {
 				task_download(t, tracker_task);
-				exit(0);
+				
 			}
+			exit(0);
 		}
 	}
 
@@ -823,8 +824,9 @@ int main(int argc, char *argv[])
 		//printf("\nuploading %d", ct++);
 		if (!(childpid=fork())) {
 			task_upload(t);
-			exit(0);
+			
 		}
+		exit(0);
 		
 	}
 
